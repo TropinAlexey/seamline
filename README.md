@@ -64,6 +64,24 @@ public void Module_implementation_must_not_depend_on_another_modules_implementat
 }
 ```
 
+That's one of six rules `Seamline.ArchTests` runs on every build, each
+stated as prose somewhere in `CLAUDE.md` or an ADR and enforced here instead
+of trusted to hold:
+
+| Rule | Where it's stated |
+|---|---|
+| A module's implementation never depends on another module's implementation | `CLAUDE.md` |
+| A `.Contracts` assembly never depends on any implementation | `CLAUDE.md` |
+| A `.Contracts` assembly depends on nothing but `SharedKernel` | `CLAUDE.md` |
+| Money and volume fields are never `double`/`float` | `CLAUDE.md`, [ADR-0007](docs/adr/0007-decimal-rounding.md) |
+| An implementation assembly exposes nothing public beyond its DI/endpoint composition root | `CLAUDE.md` ("internal by default") |
+| No migration adds a foreign key across module schemas | `CLAUDE.md` |
+
+The last one runs each migration's `Up()` against a real `MigrationBuilder`
+and inspects the resulting operations — including foreign keys declared
+inline inside `CreateTable`, which don't show up as a top-level operation
+and would otherwise make the check pass vacuously.
+
 Two services are extracted from the monolith on purpose, once Phase 2 lands:
 `Reporting.Worker` (REMIT/ACER submission) and `Valuation.Worker`
 (mark-to-market fan-out). Both share the same PostgreSQL database — this is
@@ -103,6 +121,22 @@ dotnet run --project src/Seamline.Api
 
 ## Status
 
-Phase 1 (skeleton): module boundaries, arch tests, and the module DB schema
-are in place. Domain logic, EF Core persistence, and CI are in progress —
-this README will track phases as they land.
+Phase 1 in progress. Landed so far:
+
+- Module boundaries + the six architecture tests above, all running in CI.
+- A working vertical slice across three modules: book a trade, submit it,
+  see the derived position — Reference → Trading → Risk, talking only
+  through Contracts and MassTransit, never a direct reference.
+- The credit-limit saga ([ADR-0008](docs/adr/0008-saga-placement-and-ownership.md)):
+  within-limit trades activate immediately; a breach parks the trade pending
+  a `risk`-role approval, with a timeout and a compensating release if
+  nobody responds.
+- Append-only trade history ([ADR-0006](docs/adr/0006-audit-trail-instead-of-event-sourcing.md))
+  with the immutability guarantee enforced by PostgreSQL itself: the app
+  connects as a restricted role that has `SELECT`/`INSERT` on history tables
+  and nothing else — migrations run as a separate, more privileged role.
+
+Still open for Phase 1: the remaining trade states (`Cancelled`, `Amended`,
+`Delivered`, `Settled`), PostgreSQL Row-Level Security as a second
+multi-tenancy layer, and the `MarketData`/`Settlement`/`Identity` modules,
+which are still empty scaffolding.

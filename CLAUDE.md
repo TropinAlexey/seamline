@@ -36,6 +36,11 @@ extraction criteria.
   implementation assembly.
 - No foreign keys across module schemas in PostgreSQL. Referential integrity
   between modules is eventual, via events, not enforced at the database level.
+- A saga belongs to the module that owns the aggregate whose lifecycle it
+  drives, never a dedicated `Sagas` project — see
+  `docs/adr/0008-saga-placement-and-ownership.md`. `messaging` is the one
+  cross-cutting schema in the system (outbox/inbox infrastructure); it is not
+  a precedent for other shared schemas.
 
 ## No MediatR
 
@@ -46,7 +51,7 @@ which is a real message bus, not a MediatR replacement wearing a different
 name. MassTransit is wired from Phase 1 with the in-memory transport;
 switching to RabbitMQ in Phase 2 is a transport configuration change, not a
 rewrite of publishers or consumers. MassTransit is pinned to `8.5.10` — 9.x
-requires a commercial license (see `docs/adr/0008-masstransit-version-pin.md`);
+requires a commercial license (see `docs/adr/0009-masstransit-version-pin.md`);
 do not float this dependency without reading that ADR first.
 
 ## Any architectural decision → a new ADR

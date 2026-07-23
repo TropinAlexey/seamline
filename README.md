@@ -87,7 +87,8 @@ Full reasoning: `docs/adr/0001-modular-monolith.md`.
 | [0005](docs/adr/0005-multi-tenancy.md) | Multi-tenancy: shared schema + `tenant_id`, not database-per-tenant |
 | [0006](docs/adr/0006-audit-trail-instead-of-event-sourcing.md) | Versioned append-only history instead of Event Sourcing |
 | [0007](docs/adr/0007-decimal-rounding.md) | `decimal` for money and volume, explicit rounding |
-| [0008](docs/adr/0008-masstransit-version-pin.md) | MassTransit pinned to 8.5.10 — 9.x requires a commercial license |
+| [0008](docs/adr/0008-saga-placement-and-ownership.md) | Credit-limit saga: lives in Trading, only engages on a limit breach |
+| [0009](docs/adr/0009-masstransit-version-pin.md) | MassTransit pinned to 8.5.10 — 9.x requires a commercial license |
 
 More ADRs land as decisions are made — see `CLAUDE.md`.
 

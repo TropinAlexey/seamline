@@ -1,4 +1,4 @@
-# ADR-0008: Pin MassTransit to 8.5.10 (Last Apache-2.0 Release)
+# ADR-0009: Pin MassTransit to 8.5.10 (Last Apache-2.0 Release)
 
 **Status:** Accepted
 **Date:** 2026-07

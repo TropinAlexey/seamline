@@ -69,11 +69,55 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                     price = table.Column<decimal>(type: "numeric(18,4)", precision: 18, scale: 4, nullable: false),
                     counterparty_id = table.Column<Guid>(type: "uuid", nullable: false),
                     state = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    version = table.Column<int>(type: "integer", nullable: false),
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_trade", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "trade_approval_saga",
+                schema: "trading",
+                columns: table => new
+                {
+                    CorrelationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    current_state = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    counterparty_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    notional = table.Column<decimal>(type: "numeric(18,4)", precision: 18, scale: 4, nullable: false),
+                    approval_timeout_token_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_trade_approval_saga", x => x.CorrelationId);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "trade_history",
+                schema: "trading",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    trade_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    version = table.Column<int>(type: "integer", nullable: false),
+                    valid_from = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    changed_by = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    change_reason = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    commodity_code = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    delivery_period = table.Column<string>(type: "character varying(7)", maxLength: 7, nullable: false),
+                    direction = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false),
+                    volume = table.Column<decimal>(type: "numeric(18,3)", precision: 18, scale: 3, nullable: false),
+                    price = table.Column<decimal>(type: "numeric(18,4)", precision: 18, scale: 4, nullable: false),
+                    counterparty_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    state = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_trade_history", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -158,6 +202,26 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                 schema: "trading",
                 table: "OutboxState",
                 column: "Created");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_trade_history_trade_id_version",
+                schema: "trading",
+                table: "trade_history",
+                columns: new[] { "trade_id", "version" },
+                unique: true);
+
+            // seamline_app is the restricted runtime role (see
+            // docker/postgres-init/01-create-app-role.sql and
+            // docs/adr/0006-audit-trail-instead-of-event-sourcing.md).
+            // trade_history gets SELECT + INSERT only — no UPDATE, no
+            // DELETE. That omission is the actual immutability guarantee;
+            // everything else here is ordinary read/write access.
+            migrationBuilder.Sql("GRANT USAGE ON SCHEMA trading TO seamline_app;");
+            migrationBuilder.Sql("GRANT SELECT, INSERT, UPDATE ON trading.trade TO seamline_app;");
+            migrationBuilder.Sql("GRANT SELECT, INSERT ON trading.trade_history TO seamline_app;");
+            migrationBuilder.Sql("GRANT SELECT, INSERT, UPDATE, DELETE ON trading.trade_approval_saga TO seamline_app;");
+            migrationBuilder.Sql("GRANT SELECT, INSERT, UPDATE, DELETE ON trading.\"InboxState\", trading.\"OutboxState\", trading.\"OutboxMessage\" TO seamline_app;");
+            migrationBuilder.Sql("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA trading TO seamline_app;");
         }
 
         /// <inheritdoc />
@@ -169,6 +233,14 @@ namespace Seamline.Modules.Trading.Internal.Migrations
 
             migrationBuilder.DropTable(
                 name: "trade",
+                schema: "trading");
+
+            migrationBuilder.DropTable(
+                name: "trade_approval_saga",
+                schema: "trading");
+
+            migrationBuilder.DropTable(
+                name: "trade_history",
                 schema: "trading");
 
             migrationBuilder.DropTable(

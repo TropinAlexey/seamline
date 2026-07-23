@@ -3,13 +3,16 @@ using Seamline.SharedKernel;
 
 namespace Seamline.Modules.Trading.Internal;
 
-// Draft -> Confirmed only for now. The full lifecycle (CreditChecked, Active,
-// Delivered, Settled, Cancelled, Amended) arrives with the credit-limit saga;
-// see the open question on saga ownership in CLAUDE.md history.
+// Draft -> Submitted -> Active | CreditPending -> Active | Rejected.
+// Matches ADR-0008: the saga and the trade lifecycle are the same machine.
+// Cancelled/Amended/Delivered/Settled are out of scope for now.
 internal enum TradeState
 {
     Draft = 1,
-    Confirmed = 2
+    Submitted = 2,
+    CreditPending = 3,
+    Active = 4,
+    Rejected = 5
 }
 
 internal sealed class Trade : TenantOwnedEntity<Guid>
@@ -21,6 +24,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     public decimal Price { get; private set; }
     public Guid CounterpartyId { get; private set; }
     public TradeState State { get; private set; }
+    public int Version { get; private set; }
 
     private Trade() { }
 
@@ -52,17 +56,53 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
             Volume = volume,
             Price = price,
             CounterpartyId = counterpartyId,
-            State = TradeState.Draft
+            State = TradeState.Draft,
+            Version = 1
         };
     }
 
-    public TradeConfirmed Confirm()
+    public decimal Notional => Volume * Price;
+
+    public TradeHistory Submit(string changedBy, string changeReason)
     {
-        if (State != TradeState.Draft)
-            throw new InvalidOperationException($"Trade {Id} cannot be confirmed from state {State}.");
+        RequireState(nameof(Submit), TradeState.Draft);
+        State = TradeState.Submitted;
+        Version++;
+        return TradeHistory.CreateSnapshot(this, changedBy, changeReason);
+    }
 
-        State = TradeState.Confirmed;
+    public (TradeHistory History, TradeActivated Event) Activate(string changedBy, string changeReason)
+    {
+        RequireState(nameof(Activate), TradeState.Submitted, TradeState.CreditPending);
+        State = TradeState.Active;
+        Version++;
+        var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
+        var activated = new TradeActivated(Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, Volume, Price, CounterpartyId);
+        return (history, activated);
+    }
 
-        return new TradeConfirmed(Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, Volume, Price, CounterpartyId);
+    public TradeHistory EnterCreditPending(string changedBy, string changeReason)
+    {
+        RequireState(nameof(EnterCreditPending), TradeState.Submitted);
+        State = TradeState.CreditPending;
+        Version++;
+        return TradeHistory.CreateSnapshot(this, changedBy, changeReason);
+    }
+
+    public (TradeHistory History, TradeRejected Event) Reject(string changedBy, string changeReason)
+    {
+        RequireState(nameof(Reject), TradeState.Submitted, TradeState.CreditPending);
+        State = TradeState.Rejected;
+        Version++;
+        var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
+        var rejected = new TradeRejected(Id, TenantId.Value);
+        return (history, rejected);
+    }
+
+    private void RequireState(string methodName, params ReadOnlySpan<TradeState> allowed)
+    {
+        if (!allowed.Contains(State))
+            throw new InvalidOperationException(
+                $"Trade {Id}: {methodName} requires state {string.Join(" or ", allowed.ToArray())}, was {State}.");
     }
 }

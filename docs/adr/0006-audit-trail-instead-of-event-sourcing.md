@@ -43,13 +43,22 @@ Concretely:
 
 - `trading.trade` — current state, one row per trade.
 - `trading.trade_history` — append-only. One row per version:
-  `(trade_id, version, valid_from, valid_to, <full field snapshot>,
-  changed_by, change_reason)`.
+  `(trade_id, version, valid_from, <full field snapshot>,
+  changed_by, change_reason)`. No `valid_to` column — see below.
 - `audit.audit_event` — cross-module actor/action/timestamp/context record.
-- Amendments create a new version and close the previous one by setting
-  `valid_to`. They never mutate an existing history row.
+- Amendments create a new version; the previous version is never mutated.
+  History rows store `valid_from` only — no `valid_to` column. The end of a
+  version's validity is derived at query time as the next version's
+  `valid_from` (or "still open" if there is no next version). An earlier
+  draft of this decision described a version as being "closed by setting
+  `valid_to`", which is wrong: closing a row that way requires an `UPDATE`,
+  directly contradicting "never mutated" below. Deriving `valid_to` instead
+  of storing it removes the contradiction and keeps the table genuinely
+  insert-only.
 - `UPDATE` and `DELETE` on history tables are revoked at the database role
-  level, so immutability is enforced by the database rather than by convention.
+  level, so immutability is enforced by the database rather than by convention —
+  and because there is no `valid_to` column to update, that revocation is
+  never in tension with normal operation; it has nothing legitimate to block.
 - Derived data carries provenance: every `risk.valuation_snapshot` records the
   `curve_version` that produced it, making any past valuation reproducible.
 

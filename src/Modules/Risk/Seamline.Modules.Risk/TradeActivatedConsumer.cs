@@ -5,9 +5,9 @@ using Seamline.SharedKernel;
 
 namespace Seamline.Modules.Risk.Internal;
 
-internal sealed class TradeConfirmedConsumer(RiskDbContext db, TenantContext tenantContext) : IConsumer<TradeConfirmed>
+internal sealed class TradeActivatedConsumer(RiskDbContext db, TenantContext tenantContext) : IConsumer<TradeActivated>
 {
-    public async Task Consume(ConsumeContext<TradeConfirmed> context)
+    public async Task Consume(ConsumeContext<TradeActivated> context)
     {
         var message = context.Message;
         tenantContext.SetTenant(new TenantId(message.TenantId));

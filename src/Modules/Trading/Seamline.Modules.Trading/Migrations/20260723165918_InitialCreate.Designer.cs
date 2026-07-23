@@ -12,7 +12,7 @@ using Seamline.Modules.Trading.Internal;
 namespace Seamline.Modules.Trading.Internal.Migrations
 {
     [DbContext(typeof(TradingDbContext))]
-    [Migration("20260723153002_InitialCreate")]
+    [Migration("20260723165918_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -237,6 +237,10 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
                     b.Property<decimal>("Volume")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)")
@@ -245,6 +249,126 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("trade", "trading");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.Trading.Internal.TradeApprovalState", b =>
+                {
+                    b.Property<Guid>("CorrelationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ApprovalTimeoutTokenId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approval_timeout_token_id");
+
+                    b.Property<Guid>("CounterpartyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("counterparty_id");
+
+                    b.Property<string>("CurrentState")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("current_state");
+
+                    b.Property<decimal>("Notional")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("notional");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("CorrelationId");
+
+                    b.ToTable("trade_approval_saga", "trading");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.Trading.Internal.TradeHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChangeReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("change_reason");
+
+                    b.Property<string>("ChangedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("changed_by");
+
+                    b.Property<string>("CommodityCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("commodity_code");
+
+                    b.Property<Guid>("CounterpartyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("counterparty_id");
+
+                    b.Property<string>("DeliveryPeriod")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("delivery_period");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("direction");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("price");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TradeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trade_id");
+
+                    b.Property<DateTimeOffset>("ValidFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<decimal>("Volume")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("volume");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TradeId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("trade_history", "trading");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>

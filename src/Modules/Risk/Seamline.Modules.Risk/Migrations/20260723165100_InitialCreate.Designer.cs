@@ -12,7 +12,7 @@ using Seamline.Modules.Risk.Internal;
 namespace Seamline.Modules.Risk.Internal.Migrations
 {
     [DbContext(typeof(RiskDbContext))]
-    [Migration("20260723152500_InitialCreate")]
+    [Migration("20260723165100_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -25,6 +25,46 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("Seamline.Modules.Risk.Internal.CreditReservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid>("CounterpartyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("counterparty_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TradeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trade_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TradeId");
+
+                    b.ToTable("credit_reservation", "risk");
+                });
 
             modelBuilder.Entity("Seamline.Modules.Risk.Internal.Position", b =>
                 {

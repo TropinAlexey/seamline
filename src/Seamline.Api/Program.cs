@@ -22,7 +22,23 @@ builder.Services.AddMassTransit(x =>
     x.AddTradingMassTransitConfiguration();
     x.AddRiskMassTransitConfiguration();
 
-    x.UsingInMemory((context, cfg) => cfg.ConfigureEndpoints(context));
+    x.UsingInMemory((context, cfg) =>
+    {
+        // The credit-limit saga's approval timeout (ADR-0008) uses
+        // MassTransit's own Schedule<>, not Hangfire — Hangfire is for work
+        // that isn't tied to a specific saga instance (EOD jobs, sweeps).
+        cfg.UseDelayedMessageScheduler();
+
+        // Covers the outbox's polling delay: an approve/reject can arrive
+        // before the saga instance it targets has been created from the
+        // (separately outboxed) TradeApprovalRequested. Combined with
+        // OnMissingInstance(Fault()) in TradeApprovalStateMachine, that race
+        // becomes a few retried deliveries instead of a silently dropped
+        // approval.
+        cfg.UseMessageRetry(r => r.Intervals(100, 250, 500, 1000, 2000));
+
+        cfg.ConfigureEndpoints(context);
+    });
 });
 
 var app = builder.Build();

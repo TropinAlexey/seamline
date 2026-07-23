@@ -9,6 +9,7 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
     public const string Schema = "risk";
 
     public DbSet<Position> Positions => Set<Position>();
+    public DbSet<CreditReservation> CreditReservations => Set<CreditReservation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +28,23 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
 
             builder.HasIndex(p => new { p.TenantId, p.CommodityCode, p.DeliveryPeriod }).IsUnique();
             builder.HasQueryFilter(p => p.TenantId == tenantContext.TenantId);
+        });
+
+        modelBuilder.Entity<CreditReservation>(builder =>
+        {
+            builder.ToTable("credit_reservation");
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.TenantId)
+                .HasConversion(t => t.Value, v => new TenantId(v))
+                .HasColumnName("tenant_id");
+            builder.Property(r => r.CounterpartyId).HasColumnName("counterparty_id");
+            builder.Property(r => r.TradeId).HasColumnName("trade_id");
+            builder.Property(r => r.Amount).HasColumnName("amount").HasPrecision(18, 4);
+            builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
+            builder.Property(r => r.CreatedAt).HasColumnName("created_at");
+
+            builder.HasIndex(r => r.TradeId);
+            builder.HasQueryFilter(r => r.TenantId == tenantContext.TenantId);
         });
     }
 }

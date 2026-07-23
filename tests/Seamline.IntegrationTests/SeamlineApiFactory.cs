@@ -1,26 +1,52 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace Seamline.IntegrationTests;
 
 public sealed class SeamlineApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine").Build();
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine")
+        .WithUsername("seamline")
+        .WithPassword("seamline")
+        .WithDatabase("seamline")
+        .Build();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        var migratorConnectionString = _postgres.GetConnectionString();
+
+        var appConnectionStringBuilder = new NpgsqlConnectionStringBuilder(migratorConnectionString)
+        {
+            Username = "seamline_app",
+            Password = "seamline_app"
+        };
+
         builder.ConfigureAppConfiguration((_, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:Postgres"] = _postgres.GetConnectionString()
+                ["ConnectionStrings:PostgresMigrator"] = migratorConnectionString,
+                ["ConnectionStrings:Postgres"] = appConnectionStringBuilder.ConnectionString
             });
         });
     }
 
-    public Task InitializeAsync() => _postgres.StartAsync();
+    public async Task InitializeAsync()
+    {
+        await _postgres.StartAsync();
+
+        // Mirrors docker/postgres-init/01-create-app-role.sql — Testcontainers
+        // doesn't run docker-entrypoint-initdb.d scripts by default, so the
+        // restricted runtime role is created explicitly here instead.
+        await _postgres.ExecScriptAsync(
+            """
+            CREATE ROLE seamline_app WITH LOGIN PASSWORD 'seamline_app';
+            GRANT CONNECT ON DATABASE seamline TO seamline_app;
+            """);
+    }
 
     async Task IAsyncLifetime.DisposeAsync()
     {

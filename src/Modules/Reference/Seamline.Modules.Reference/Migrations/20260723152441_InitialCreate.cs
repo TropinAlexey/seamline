@@ -28,6 +28,11 @@ namespace Seamline.Modules.Reference.Internal.Migrations
                 {
                     table.PrimaryKey("PK_counterparty", x => x.Id);
                 });
+
+            // seamline_app is the restricted runtime role (see
+            // docker/postgres-init/01-create-app-role.sql).
+            migrationBuilder.Sql("GRANT USAGE ON SCHEMA reference TO seamline_app;");
+            migrationBuilder.Sql("GRANT SELECT, INSERT, UPDATE ON reference.counterparty TO seamline_app;");
         }
 
         /// <inheritdoc />

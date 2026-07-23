@@ -42,7 +42,7 @@ internal sealed class CreditReservationService(RiskDbContext db, ICounterpartyDi
     public async Task FinalizeAsync(Guid tradeId, CancellationToken cancellationToken = default)
     {
         var reservation = await RequireReservationAsync(tradeId, cancellationToken);
-        reservation.Finalize();
+        reservation.MarkReserved();
         await db.SaveChangesAsync(cancellationToken);
     }
 

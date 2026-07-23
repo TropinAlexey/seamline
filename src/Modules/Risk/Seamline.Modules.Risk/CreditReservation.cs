@@ -35,7 +35,7 @@ internal sealed class CreditReservation : TenantOwnedEntity<Guid>
         };
     }
 
-    public void Finalize() => Status = CreditReservationStatus.Reserved;
+    public void MarkReserved() => Status = CreditReservationStatus.Reserved;
 
     public void Release() => Status = CreditReservationStatus.Released;
 }

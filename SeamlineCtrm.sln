@@ -50,6 +50,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Seamline.ArchTests", "tests\Seamline.ArchTests\Seamline.ArchTests.csproj", "{8F3B8BE6-EB89-4379-8E93-B53FA2DB1625}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Seamline.IntegrationTests", "tests\Seamline.IntegrationTests\Seamline.IntegrationTests.csproj", "{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -240,6 +242,18 @@ Global
 		{8F3B8BE6-EB89-4379-8E93-B53FA2DB1625}.Release|x64.Build.0 = Release|Any CPU
 		{8F3B8BE6-EB89-4379-8E93-B53FA2DB1625}.Release|x86.ActiveCfg = Release|Any CPU
 		{8F3B8BE6-EB89-4379-8E93-B53FA2DB1625}.Release|x86.Build.0 = Release|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Debug|x64.Build.0 = Debug|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Debug|x86.Build.0 = Debug|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Release|x64.ActiveCfg = Release|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Release|x64.Build.0 = Release|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Release|x86.ActiveCfg = Release|Any CPU
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -266,5 +280,6 @@ Global
 		{49BAE5FE-7D72-4221-8B1A-359DD47C461F} = {293C06CD-4E17-48BD-9F3B-B5ADDFFA9425}
 		{FA57BBD8-1951-4249-9AC9-8856BD844201} = {293C06CD-4E17-48BD-9F3B-B5ADDFFA9425}
 		{8F3B8BE6-EB89-4379-8E93-B53FA2DB1625} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{0E7100AE-9BAB-4B1E-BA18-0AF621202D3A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

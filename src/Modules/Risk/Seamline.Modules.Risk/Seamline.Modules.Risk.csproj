@@ -1,11 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\Seamline.Modules.Risk.Contracts\Seamline.Modules.Risk.Contracts.csproj" />
     <ProjectReference Include="..\..\Trading\Seamline.Modules.Trading.Contracts\Seamline.Modules.Trading.Contracts.csproj" />
     <ProjectReference Include="..\..\MarketData\Seamline.Modules.MarketData.Contracts\Seamline.Modules.MarketData.Contracts.csproj" />
     <ProjectReference Include="..\..\Reference\Seamline.Modules.Reference.Contracts\Seamline.Modules.Reference.Contracts.csproj" />
     <ProjectReference Include="..\..\..\Seamline.SharedKernel\Seamline.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MassTransit" Version="8.5.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
   <PropertyGroup>

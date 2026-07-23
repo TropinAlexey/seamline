@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: seamline
+      POSTGRES_USER: seamline
+      POSTGRES_PASSWORD: seamline
+    ports:
+      - "5432:5432"
+    volumes:
+      - seamline-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seamline"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  seamline-postgres-data:

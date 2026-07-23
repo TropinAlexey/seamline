@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Modules\Reference\Seamline.Modules.Reference\Seamline.Modules.Reference.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Reference\Seamline.Modules.Reference.Contracts\Seamline.Modules.Reference.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Trading\Seamline.Modules.Trading\Seamline.Modules.Trading.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Trading\Seamline.Modules.Trading.Contracts\Seamline.Modules.Trading.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Modules\MarketData\Seamline.Modules.MarketData\Seamline.Modules.MarketData.csproj" />
+    <ProjectReference Include="..\..\src\Modules\MarketData\Seamline.Modules.MarketData.Contracts\Seamline.Modules.MarketData.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Risk\Seamline.Modules.Risk\Seamline.Modules.Risk.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Risk\Seamline.Modules.Risk.Contracts\Seamline.Modules.Risk.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Settlement\Seamline.Modules.Settlement\Seamline.Modules.Settlement.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Settlement\Seamline.Modules.Settlement.Contracts\Seamline.Modules.Settlement.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Identity\Seamline.Modules.Identity\Seamline.Modules.Identity.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Identity\Seamline.Modules.Identity.Contracts\Seamline.Modules.Identity.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

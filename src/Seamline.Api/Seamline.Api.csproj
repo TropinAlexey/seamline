@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\Reference\Seamline.Modules.Reference\Seamline.Modules.Reference.csproj" />
+    <ProjectReference Include="..\Modules\Trading\Seamline.Modules.Trading\Seamline.Modules.Trading.csproj" />
+    <ProjectReference Include="..\Modules\MarketData\Seamline.Modules.MarketData\Seamline.Modules.MarketData.csproj" />
+    <ProjectReference Include="..\Modules\Risk\Seamline.Modules.Risk\Seamline.Modules.Risk.csproj" />
+    <ProjectReference Include="..\Modules\Settlement\Seamline.Modules.Settlement\Seamline.Modules.Settlement.csproj" />
+    <ProjectReference Include="..\Modules\Identity\Seamline.Modules.Identity\Seamline.Modules.Identity.csproj" />
+  </ItemGroup>
+
+</Project>

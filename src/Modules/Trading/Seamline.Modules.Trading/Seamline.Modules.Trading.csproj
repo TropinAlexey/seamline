@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Seamline.Modules.Trading.Contracts\Seamline.Modules.Trading.Contracts.csproj" />
+    <ProjectReference Include="..\..\Reference\Seamline.Modules.Reference.Contracts\Seamline.Modules.Reference.Contracts.csproj" />
+    <ProjectReference Include="..\..\Identity\Seamline.Modules.Identity.Contracts\Seamline.Modules.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\Seamline.SharedKernel\Seamline.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Seamline.Modules.Trading.Internal</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

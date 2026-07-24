@@ -1,9 +1,10 @@
-using System.Text.Json.Serialization;
 using MassTransit;
-using Seamline.Modules.Reference.Internal;
-using Seamline.Modules.Risk.Internal;
-using Seamline.Modules.Trading.Internal;
 using Seamline.SharedKernel;
+using Seamline.Modules.Risk.Internal;
+using System.Text.Json.Serialization;
+using Seamline.Modules.Audit.Internal;
+using Seamline.Modules.Trading.Internal;
+using Seamline.Modules.Reference.Internal;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,11 +17,13 @@ builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantCon
 builder.Services.AddReferenceModule(builder.Configuration);
 builder.Services.AddTradingModule(builder.Configuration);
 builder.Services.AddRiskModule(builder.Configuration);
+builder.Services.AddAuditModule(builder.Configuration);
 
 builder.Services.AddMassTransit(x =>
 {
     x.AddTradingMassTransitConfiguration();
     x.AddRiskMassTransitConfiguration();
+    x.AddAuditMassTransitConfiguration();
 
     x.UsingInMemory((context, cfg) =>
     {
@@ -46,6 +49,7 @@ var app = builder.Build();
 await app.Services.MigrateReferenceModuleAsync();
 await app.Services.MigrateTradingModuleAsync();
 await app.Services.MigrateRiskModuleAsync();
+await app.Services.MigrateAuditModuleAsync();
 
 if (app.Environment.IsDevelopment())
 {
@@ -75,5 +79,3 @@ app.MapTradingEndpoints();
 app.MapRiskEndpoints();
 
 app.Run();
-
-public partial class Program;

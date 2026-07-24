@@ -12,4 +12,6 @@ public sealed record TradeActivated(
     TradeDirection Direction,
     decimal Volume,
     decimal Price,
-    Guid CounterpartyId);
+    Guid CounterpartyId,
+    string Actor,
+    string Reason);

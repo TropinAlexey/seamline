@@ -19,7 +19,7 @@ public static class ReferenceModuleExtensions
         return services;
     }
 
-    // ponytail: migrate-on-startup, not a separate deploy step — fine for a
+    // migrate-on-startup, not a separate deploy step — fine for a
     // demo project's single environment; a real deployment would run
     // migrations as their own pipeline step before swapping traffic.
     //

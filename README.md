@@ -1,8 +1,16 @@
+<img src="docs/seamline-icon.png" alt="seamline" width="96" align="left" />
+
 # seamline
+
+[![CI](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white)
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
 forwards, in .NET 10 — a modular monolith with boundaries enforced in CI, and
 two services extracted on purpose.
+
+<br clear="left" />
 
 > Simplified for demonstration; not a compliant REMIT implementation.
 > Clean-room implementation. No code, schemas, or business rules from any
@@ -21,22 +29,21 @@ limits are reserved and released, not invented to demonstrate a saga.
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────┐
-│  Seamline.Api  (modular monolith, .NET 10)        │
-│                                                    │
-│  Modules/                                         │
-│    Reference/    commodities, counterparties,     │
-│                   delivery points, calendars      │
-│    Trading/       trade capture + lifecycle       │
-│    MarketData/    forward curves, fixings         │
-│    Risk/          positions, MtM, credit exposure │
-│    Settlement/    invoices, netting, payments     │
-│    Identity/      tenants, users, roles           │
-│                                                    │
-│  PostgreSQL, one schema per module                │
-│  Multi-tenant: shared schema + tenant_id           │
-│  MassTransit (in-memory transport in Phase 1)     │
-└────────────────────────────────────────────────────┘
+Seamline.Api  (modular monolith, .NET 10)
+
+Modules/
+  Reference/    commodities, counterparties,
+                delivery points, calendars
+  Trading/      trade capture + lifecycle
+  MarketData/   forward curves, fixings
+  Risk/         positions, MtM, credit exposure
+  Settlement/   invoices, netting, payments
+  Identity/     tenants, users, roles
+  Audit/        cross-module actor/action/timestamp/context log
+
+PostgreSQL, one schema per module
+Multi-tenant: shared schema + tenant_id
+MassTransit (in-memory transport in Phase 1)
 ```
 
 Each module is two projects — `Seamline.Modules.<Name>` (implementation) and

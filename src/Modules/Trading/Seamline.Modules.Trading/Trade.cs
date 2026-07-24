@@ -77,7 +77,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         State = TradeState.Active;
         Version++;
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
-        var activated = new TradeActivated(Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, Volume, Price, CounterpartyId);
+        var activated = new TradeActivated(Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, Volume, Price, CounterpartyId, changedBy, changeReason);
         return (history, activated);
     }
 
@@ -95,7 +95,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         State = TradeState.Rejected;
         Version++;
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
-        var rejected = new TradeRejected(Id, TenantId.Value);
+        var rejected = new TradeRejected(Id, TenantId.Value, changedBy, changeReason);
         return (history, rejected);
     }
 

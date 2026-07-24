@@ -13,7 +13,7 @@ public class ContractsBoundaryTests
 {
     private static readonly string[] ModuleNames =
     [
-        "Reference", "Trading", "MarketData", "Risk", "Settlement", "Identity"
+        "Reference", "Trading", "MarketData", "Risk", "Settlement", "Identity", "Audit"
     ];
 
     public static IEnumerable<object[]> Modules =>

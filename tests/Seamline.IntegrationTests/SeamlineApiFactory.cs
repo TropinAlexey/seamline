@@ -14,6 +14,11 @@ public sealed class SeamlineApiFactory : WebApplicationFactory<Program>, IAsyncL
         .WithDatabase("seamline")
         .Build();
 
+    // Exposed so tests can assert against tables no module exposes over HTTP
+    // (e.g. audit.audit_event) without punching an InternalsVisibleTo hole
+    // through the module boundary just for test access.
+    public string ConnectionString => _postgres.GetConnectionString();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         var migratorConnectionString = _postgres.GetConnectionString();

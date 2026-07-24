@@ -11,9 +11,10 @@ public static class RiskModuleExtensions
 {
     public static IServiceCollection AddRiskModule(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<RiskDbContext>(options =>
+        services.AddDbContext<RiskDbContext>((sp, options) =>
             options.UseNpgsql(configuration.GetConnectionString("Postgres"),
-                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", RiskDbContext.Schema)));
+                    npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", RiskDbContext.Schema))
+                .AddInterceptors(sp.GetRequiredService<TenantSessionVariableInterceptor>()));
 
         services.AddScoped<ICreditReservationService, CreditReservationService>();
 

@@ -7,11 +7,41 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- coverlet.msbuild settings for `dotnet test /p:CollectCoverage=true`
+       (see ci.yml). Scoped to Trade/TradeHistory specifically, not the
+       whole Seamline.Modules.Trading assembly — that assembly also holds
+       TradingDbContext, migrations, endpoints, the saga, and consumers,
+       none of which this unit test project touches (that's what
+       AuditEventTests/TradeToPositionTests/TradeLifecycleExtensionsTests
+       exercise instead). Widen the Include filter as more of Trading gets
+       unit-tested directly rather than only through integration tests. -->
+  <PropertyGroup Condition="'$(CollectCoverage)' == 'true'">
+    <Include>[Seamline.Modules.Trading]Seamline.Modules.Trading.Internal.Trade,[Seamline.Modules.Trading]Seamline.Modules.Trading.Internal.TradeHistory</Include>
+    <Threshold>60</Threshold>
+    <ThresholdType>line</ThresholdType>
+    <ThresholdStat>total</ThresholdStat>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="10.0.1">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- coverlet.collector (the VSTest data collector, "XPlat Code
+         Coverage") only reports coverage — it doesn't fail dotnet test's
+         exit code when a threshold is missed. coverlet.msbuild is the
+         integration that actually gates: /p:Threshold on dotnet test fails
+         the command itself. Both packages coexist fine; CI uses msbuild's
+         properties, IDEs can still use the collector for coverage display. -->
+    <PackageReference Include="coverlet.msbuild" Version="6.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- See the identical comment in Seamline.ArchTests.csproj: Trading's
+         own EFCore.Design reference is PrivateAssets="all" and doesn't flow
+         here, so this pin keeps this project's resolution consistent with
+         what Seamline.Modules.Trading.dll was actually compiled against. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">

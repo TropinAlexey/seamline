@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 using Seamline.Modules.Audit.Internal;
 using Seamline.Modules.Trading.Internal;
 using Seamline.Modules.Reference.Internal;
+using Seamline.Modules.MarketData.Internal;
+using Seamline.Modules.Settlement.Internal;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,17 +15,21 @@ builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Ad
 
 builder.Services.AddScoped<TenantContext>();
 builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
+builder.Services.AddScoped<TenantSessionVariableInterceptor>();
 
 builder.Services.AddReferenceModule(builder.Configuration);
 builder.Services.AddTradingModule(builder.Configuration);
 builder.Services.AddRiskModule(builder.Configuration);
 builder.Services.AddAuditModule(builder.Configuration);
+builder.Services.AddMarketDataModule(builder.Configuration);
+builder.Services.AddSettlementModule(builder.Configuration);
 
 builder.Services.AddMassTransit(x =>
 {
     x.AddTradingMassTransitConfiguration();
     x.AddRiskMassTransitConfiguration();
     x.AddAuditMassTransitConfiguration();
+    x.AddSettlementMassTransitConfiguration();
 
     x.UsingInMemory((context, cfg) =>
     {
@@ -50,6 +56,8 @@ await app.Services.MigrateReferenceModuleAsync();
 await app.Services.MigrateTradingModuleAsync();
 await app.Services.MigrateRiskModuleAsync();
 await app.Services.MigrateAuditModuleAsync();
+await app.Services.MigrateMarketDataModuleAsync();
+await app.Services.MigrateSettlementModuleAsync();
 
 if (app.Environment.IsDevelopment())
 {
@@ -77,5 +85,7 @@ app.Use(async (context, next) =>
 app.MapReferenceEndpoints();
 app.MapTradingEndpoints();
 app.MapRiskEndpoints();
+app.MapMarketDataEndpoints();
+app.MapSettlementEndpoints();
 
 app.Run();

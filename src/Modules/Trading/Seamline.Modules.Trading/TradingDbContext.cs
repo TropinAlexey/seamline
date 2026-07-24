@@ -80,12 +80,16 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
             builder.Property<uint>("xmin").HasColumnName("xmin").IsRowVersion();
         });
 
-        // Transactional outbox: TradeActivated/TradeRejected are written to
-        // this schema in the same transaction as the trade's state change,
-        // then dispatched by MassTransit's bus outbox delivery service.
-        // See ADR-0004 (outbox), when written.
-        modelBuilder.AddInboxStateEntity();
-        modelBuilder.AddOutboxMessageEntity();
-        modelBuilder.AddOutboxStateEntity();
+        // Transactional outbox: TradeActivated/TradeRejected are written in
+        // the same transaction as the trade's state change, then dispatched
+        // by MassTransit's bus outbox delivery service. See ADR-0004
+        // (outbox), when written. Tables live in messaging, not trading —
+        // ADR-0008 calls messaging out as the one cross-cutting schema in
+        // the system (transport, not domain); this DbContext just happens
+        // to be the one MassTransit is wired to for Trading's outbox.
+        const string messagingSchema = "messaging";
+        modelBuilder.AddInboxStateEntity(e => e.ToTable("InboxState", messagingSchema));
+        modelBuilder.AddOutboxMessageEntity(e => e.ToTable("OutboxMessage", messagingSchema));
+        modelBuilder.AddOutboxStateEntity(e => e.ToTable("OutboxState", messagingSchema));
     }
 }

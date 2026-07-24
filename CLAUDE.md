@@ -83,8 +83,10 @@ implicit via type conversion. See `docs/adr/0007-decimal-rounding.md`.
 
 ## Multi-tenancy
 
-Shared schema, `tenant_id` on every table, EF Core global query filter as the
-primary enforcement mechanism. See `docs/adr/0005-multi-tenancy.md`.
+Shared schema, `tenant_id` on every table, enforced by two layers: an EF Core
+global query filter (application code) and PostgreSQL Row-Level Security
+(`CREATE POLICY` per tenant-owned table, keyed on a session variable a
+connection interceptor sets). See `docs/adr/0005-multi-tenancy.md`.
 
 ## Commands
 

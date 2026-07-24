@@ -25,3 +25,12 @@ jobs:
 
       - name: Test
         run: dotnet test SeamlineCtrm.sln --configuration Release --no-build --logger "console;verbosity=normal"
+
+      # Separate from the run above: coverlet.msbuild's threshold only fails
+      # dotnet test's own exit code when CollectCoverage instruments the
+      # build, so this is its own invocation, not a flag on the general one.
+      # Scoped to Trading's domain logic (Trade/TradeHistory) — see the
+      # Include filter in Seamline.Modules.Trading.Tests.csproj for why the
+      # gate isn't solution-wide yet.
+      - name: Coverage gate (Trading domain logic)
+        run: dotnet test tests/Seamline.Modules.Trading.Tests/Seamline.Modules.Trading.Tests.csproj --configuration Release --no-build /p:CollectCoverage=true

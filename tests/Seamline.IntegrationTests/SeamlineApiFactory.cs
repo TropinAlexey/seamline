@@ -19,6 +19,15 @@ public sealed class SeamlineApiFactory : WebApplicationFactory<Program>, IAsyncL
     // through the module boundary just for test access.
     public string ConnectionString => _postgres.GetConnectionString();
 
+    // Same restricted role the app itself connects as — for tests that need
+    // to prove the RLS policies (ADR-0005 layer 2) hold even for a raw SQL
+    // connection that never goes through EF Core's query filter at all.
+    public string AppConnectionString => new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString())
+    {
+        Username = "seamline_app",
+        Password = "seamline_app"
+    }.ConnectionString;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         var migratorConnectionString = _postgres.GetConnectionString();

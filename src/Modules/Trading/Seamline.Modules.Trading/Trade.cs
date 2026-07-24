@@ -141,15 +141,18 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         return (history, amended);
     }
 
-    // Physical delivery for the period has happened. No cross-module event:
-    // nothing reacts to it yet (no Settlement, no Valuation.Worker) — see
-    // Phase 2 in the TODO tracker.
-    public TradeHistory Deliver(string changedBy, string changeReason)
+    // Physical delivery for the period has happened. Publishes TradeDelivered
+    // now that Settlement exists to consume it (see ADR-0011's revisit
+    // criteria) — Volume/Price ride along so Settlement can compute the
+    // invoice amount without a synchronous call back into Trading.
+    public (TradeHistory History, TradeDelivered Event) Deliver(string changedBy, string changeReason)
     {
         RequireState(nameof(Deliver), TradeState.Active);
         State = TradeState.Delivered;
         Version++;
-        return TradeHistory.CreateSnapshot(this, changedBy, changeReason);
+        var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
+        var delivered = new TradeDelivered(Id, TenantId.Value, CounterpartyId, Volume, Price, changedBy, changeReason);
+        return (history, delivered);
     }
 
     private void RequireState(string methodName, params ReadOnlySpan<TradeState> allowed)

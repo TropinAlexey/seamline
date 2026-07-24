@@ -10,9 +10,10 @@ public static class TradingModuleExtensions
 {
     public static IServiceCollection AddTradingModule(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<TradingDbContext>(options =>
+        services.AddDbContext<TradingDbContext>((sp, options) =>
             options.UseNpgsql(configuration.GetConnectionString("Postgres"),
-                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", TradingDbContext.Schema)));
+                    npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", TradingDbContext.Schema))
+                .AddInterceptors(sp.GetRequiredService<TenantSessionVariableInterceptor>()));
 
         return services;
     }

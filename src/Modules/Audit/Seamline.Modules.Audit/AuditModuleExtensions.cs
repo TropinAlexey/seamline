@@ -10,9 +10,10 @@ public static class AuditModuleExtensions
 {
     public static IServiceCollection AddAuditModule(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<AuditDbContext>(options =>
+        services.AddDbContext<AuditDbContext>((sp, options) =>
             options.UseNpgsql(configuration.GetConnectionString("Postgres"),
-                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", AuditDbContext.Schema)));
+                    npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", AuditDbContext.Schema))
+                .AddInterceptors(sp.GetRequiredService<TenantSessionVariableInterceptor>()));
 
         return services;
     }

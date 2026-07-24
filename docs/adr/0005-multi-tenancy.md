@@ -40,11 +40,31 @@ Concretely:
 - `ITenantContext` (in `Seamline.SharedKernel`) is resolved per-request from
   a claim/header by API middleware and injected wherever a `DbContext` is
   constructed.
-- PostgreSQL Row-Level Security is the planned second enforcement layer —
-  a `CREATE POLICY` per tenant-owned table keyed on a session variable the
-  middleware sets — so that a forgotten query filter or a raw SQL statement
-  still cannot cross tenants. Not yet implemented in Phase 1; tracked as
-  follow-up, not silently dropped.
+- **PostgreSQL Row-Level Security is the second enforcement layer**,
+  implemented: a `CREATE POLICY tenant_isolation` per tenant-owned table
+  (`reference.counterparty`, `trading.trade`/`trade_history`,
+  `risk.position`/`credit_reservation`, `audit.audit_event`), each declared
+  in that table's own migration alongside the table itself, keyed on a
+  session variable, `app.tenant_id`, set by `TenantSessionVariableInterceptor`
+  (`Seamline.SharedKernel`) every time a connection opens — including a
+  pooled connection being reused for a different tenant's request, since
+  `ConnectionOpened` fires on every logical `Open()` regardless of whether
+  the physical connection is new. `seamline_app` is not the table owner, so
+  the policy applies to it without `FORCE ROW LEVEL SECURITY`. Each policy's
+  bare `USING` clause (no separate `WITH CHECK`) covers `SELECT` and
+  `INSERT`/`UPDATE` alike, so a forgotten query filter or a raw SQL
+  statement still cannot read or write across tenants.
+
+  **This is what an EF Core query filter alone cannot catch: it turned up a
+  real bug the moment it was enabled.** The three Audit consumers
+  (`TradeActivatedAuditConsumer`, `TradeRejectedAuditConsumer`,
+  `TradeAmendedAuditConsumer`) never called `tenantContext.SetTenant(...)`
+  before writing an `audit_event` row — the EF Core query filter (layer 1)
+  never noticed because it only constrains `SELECT`, not `INSERT`, so the
+  gap was invisible until RLS made an insert with a mismatched session
+  tenant fail outright (`42501: new row violates row-level security
+  policy`). Fixed by setting the tenant from the message, same as every
+  other consumer already did.
 
 ## Consequences
 
@@ -62,11 +82,12 @@ Concretely:
 
 ### Negative
 
-- **Enforcement lives in application code by default.** An EF Core query
-  filter is bypassed by `.IgnoreQueryFilters()`, raw SQL, or a new query path
-  that forgets to apply it. This is the reason RLS is the planned second
-  layer rather than an optional nice-to-have — until it lands, a single
-  missed filter is a real cross-tenant leak, not a theoretical one.
+- **Layer 1 alone would have been enforcement living in application code by
+  default.** An EF Core query filter is bypassed by `.IgnoreQueryFilters()`,
+  raw SQL, or a new query path that forgets to apply it — and, as the
+  Audit consumer bug above shows, an `INSERT` was never covered by the
+  filter at all. RLS (layer 2) is why that bug failed loudly instead of
+  silently writing rows under the wrong tenant.
 - **No per-tenant operational isolation.** A single tenant's data cannot be
   backed up, restored, or scaled independently of the others. Accepted:
   Seamline's tenant count and profile do not require this.

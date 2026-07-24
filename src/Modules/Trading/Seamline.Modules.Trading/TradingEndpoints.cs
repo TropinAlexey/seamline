@@ -139,14 +139,15 @@ public static class TradingEndpoints
             return Results.Ok(new { trade.Id, trade.State, trade.Volume, trade.Price });
         });
 
-        group.MapPost("/{id:guid}/deliver", async (Guid id, TradingDbContext db, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/deliver", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
         {
             var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
             if (trade is null)
                 return Results.NotFound();
 
-            var history = trade.Deliver("trader", "Delivered");
+            var (history, delivered) = trade.Deliver("trader", "Delivered");
             db.TradeHistory.Add(history);
+            await publisher.Publish(delivered, ct);
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { trade.Id, trade.State });

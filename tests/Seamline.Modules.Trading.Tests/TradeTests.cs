@@ -271,14 +271,21 @@ public class TradeTests
     }
 
     [Fact]
-    public void Deliver_moves_Active_to_Delivered()
+    public void Deliver_moves_Active_to_Delivered_and_publishes_TradeDelivered()
     {
-        var trade = MoveTo(TradeState.Active);
+        var trade = MoveTo(TradeState.Active, volume: 100m, price: 45.5m);
 
-        var history = trade.Deliver("trader", "Delivered");
+        var (history, delivered) = trade.Deliver("trader", "Delivered");
 
         Assert.Equal(TradeState.Delivered, trade.State);
         Assert.Equal(TradeState.Delivered, history.State);
+        Assert.Equal(trade.Id, delivered.TradeId);
+        Assert.Equal(trade.TenantId.Value, delivered.TenantId);
+        Assert.Equal(trade.CounterpartyId, delivered.CounterpartyId);
+        Assert.Equal(100m, delivered.Volume);
+        Assert.Equal(45.5m, delivered.Price);
+        Assert.Equal("trader", delivered.Actor);
+        Assert.Equal("Delivered", delivered.Reason);
     }
 
     [Theory]

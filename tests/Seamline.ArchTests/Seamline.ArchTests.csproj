@@ -12,6 +12,16 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Modules' own EFCore.Design PackageReference (10.0.10) has
+         PrivateAssets="all", so it never flows transitively here — this
+         project's own NuGet resolution otherwise floors on the lowest
+         visible constraint (Npgsql.EntityFrameworkCore.PostgreSQL's
+         [10.0.4, 11.0.0)), while the module .dlls it loads via
+         ProjectReference were compiled against 10.0.10. Pinning the same
+         version explicitly, mirroring Seamline.IntegrationTests.csproj,
+         makes this project's resolution agree with what's actually on disk
+         instead of MSBuild silently picking the wrong one (MSB3277). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
     <PackageReference Include="xunit" Version="2.9.3" />

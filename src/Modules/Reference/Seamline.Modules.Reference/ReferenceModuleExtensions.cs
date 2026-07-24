@@ -10,9 +10,10 @@ public static class ReferenceModuleExtensions
 {
     public static IServiceCollection AddReferenceModule(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<ReferenceDbContext>(options =>
+        services.AddDbContext<ReferenceDbContext>((sp, options) =>
             options.UseNpgsql(configuration.GetConnectionString("Postgres"),
-                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", ReferenceDbContext.Schema)));
+                    npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", ReferenceDbContext.Schema))
+                .AddInterceptors(sp.GetRequiredService<TenantSessionVariableInterceptor>()));
 
         services.AddScoped<ICounterpartyDirectory, CounterpartyDirectory>();
 

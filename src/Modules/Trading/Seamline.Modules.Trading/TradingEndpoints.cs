@@ -32,6 +32,14 @@ public static class TradingEndpoints
             return Results.Created($"/trades/{trade.Id}", new { trade.Id });
         });
 
+        group.MapGet("/{id:guid}", async (Guid id, TradingDbContext db, CancellationToken ct) =>
+        {
+            var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
+            return trade is null
+                ? Results.NotFound()
+                : Results.Ok(new { trade.Id, trade.State, trade.Volume, trade.Price, trade.Version });
+        });
+
         group.MapPost("/{id:guid}/submit", async (
             Guid id,
             TradingDbContext db,
@@ -93,6 +101,57 @@ public static class TradingEndpoints
             return Results.Accepted();
         });
 
+        group.MapPost("/{id:guid}/cancel", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
+        {
+            var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
+            if (trade is null)
+                return Results.NotFound();
+
+            // CreditPending has a live saga holding the approval timeout —
+            // cancellation has to go through it (same reasoning as
+            // approve/reject), not mutate the Trade directly here. Draft
+            // and Submitted never started a saga, so those cancel inline.
+            if (trade.State == TradeState.CreditPending)
+            {
+                await publisher.Publish(new TradeCancelRequested(id), ct);
+                await db.SaveChangesAsync(ct); // flush the outbox — see the comment on /approve
+                return Results.Accepted();
+            }
+
+            var history = trade.Cancel("trader", "Cancelled by trader");
+            db.TradeHistory.Add(history);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new { trade.Id, trade.State });
+        });
+
+        group.MapPost("/{id:guid}/amend", async (Guid id, AmendTradeRequest request, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
+        {
+            var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
+            if (trade is null)
+                return Results.NotFound();
+
+            var (history, amended) = trade.Amend("trader", request.Reason, request.Volume, request.Price);
+            db.TradeHistory.Add(history);
+            await publisher.Publish(amended, ct);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new { trade.Id, trade.State, trade.Volume, trade.Price });
+        });
+
+        group.MapPost("/{id:guid}/deliver", async (Guid id, TradingDbContext db, CancellationToken ct) =>
+        {
+            var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
+            if (trade is null)
+                return Results.NotFound();
+
+            var history = trade.Deliver("trader", "Delivered");
+            db.TradeHistory.Add(history);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new { trade.Id, trade.State });
+        });
+
         return app;
     }
 
@@ -111,3 +170,5 @@ internal sealed record CreateTradeRequest(
     decimal Volume,
     decimal Price,
     Guid CounterpartyId);
+
+internal sealed record AmendTradeRequest(decimal Volume, decimal Price, string Reason);

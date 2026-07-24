@@ -4,15 +4,20 @@ using Seamline.SharedKernel;
 namespace Seamline.Modules.Trading.Internal;
 
 // Draft -> Submitted -> Active | CreditPending -> Active | Rejected.
+// Draft | Submitted | CreditPending -> Cancelled. Active -> Delivered.
 // Matches ADR-0008: the saga and the trade lifecycle are the same machine.
-// Cancelled/Amended/Delivered/Settled are out of scope for now.
+// Amended is not a separate state — it's a transition that keeps a trade
+// Active while bumping its version (see Trade.Amend). Settled stays out of
+// scope: it belongs to the still-empty Settlement module, not Trading.
 internal enum TradeState
 {
     Draft = 1,
     Submitted = 2,
     CreditPending = 3,
     Active = 4,
-    Rejected = 5
+    Rejected = 5,
+    Cancelled = 6,
+    Delivered = 7
 }
 
 internal sealed class Trade : TenantOwnedEntity<Guid>
@@ -97,6 +102,54 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var rejected = new TradeRejected(Id, TenantId.Value, changedBy, changeReason);
         return (history, rejected);
+    }
+
+    // Cancellable before the trade has ever affected a position: Draft and
+    // Submitted never reserved credit, CreditPending only holds a
+    // provisional reservation. Active is excluded on purpose — cancelling a
+    // live trade is Amend (adjust) or a future Settlement-driven reversal,
+    // not a plain Cancel.
+    public TradeHistory Cancel(string changedBy, string changeReason)
+    {
+        RequireState(nameof(Cancel), TradeState.Draft, TradeState.Submitted, TradeState.CreditPending);
+        State = TradeState.Cancelled;
+        Version++;
+        return TradeHistory.CreateSnapshot(this, changedBy, changeReason);
+    }
+
+    // Corrects volume/price on an already-active trade — same Trade.Id, new
+    // version, State stays Active. Deliberately does not re-run the credit
+    // check: re-validating exposure on every amendment would resurrect the
+    // full breach saga (ADR-0008) for what's meant to be a lightweight
+    // correction. TradeAmended carries both OldVolume and the new Volume so
+    // Risk can adjust the position by the delta instead of recomputing it.
+    public (TradeHistory History, TradeAmended Event) Amend(string changedBy, string changeReason, decimal newVolume, decimal newPrice)
+    {
+        RequireState(nameof(Amend), TradeState.Active);
+        if (newVolume <= 0)
+            throw new ArgumentOutOfRangeException(nameof(newVolume), "Volume must be positive.");
+        if (newPrice <= 0)
+            throw new ArgumentOutOfRangeException(nameof(newPrice), "Price must be positive.");
+
+        var oldVolume = Volume;
+        Volume = newVolume;
+        Price = newPrice;
+        Version++;
+        var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
+        var amended = new TradeAmended(
+            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, oldVolume, Volume, Price, CounterpartyId, changedBy, changeReason);
+        return (history, amended);
+    }
+
+    // Physical delivery for the period has happened. No cross-module event:
+    // nothing reacts to it yet (no Settlement, no Valuation.Worker) — see
+    // Phase 2 in the TODO tracker.
+    public TradeHistory Deliver(string changedBy, string changeReason)
+    {
+        RequireState(nameof(Deliver), TradeState.Active);
+        State = TradeState.Delivered;
+        Version++;
+        return TradeHistory.CreateSnapshot(this, changedBy, changeReason);
     }
 
     private void RequireState(string methodName, params ReadOnlySpan<TradeState> allowed)

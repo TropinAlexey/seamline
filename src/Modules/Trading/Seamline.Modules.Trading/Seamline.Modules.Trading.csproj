@@ -22,6 +22,13 @@
     <ProjectReference Include="..\..\Risk\Seamline.Modules.Risk.Contracts\Seamline.Modules.Risk.Contracts.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Domain logic (Trade, TradeHistory) is internal by design (see
+         Seamline.ArchTests.InternalVisibilityTests) — this grants the unit
+         test project friend access instead of making it public. -->
+    <InternalsVisibleTo Include="Seamline.Modules.Trading.Tests" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Seamline.Modules.Trading.Internal</RootNamespace>

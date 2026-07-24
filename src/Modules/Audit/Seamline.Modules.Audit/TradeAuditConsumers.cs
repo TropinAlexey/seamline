@@ -28,3 +28,14 @@ internal sealed class TradeRejectedAuditConsumer(AuditDbContext db) : IConsumer<
         await db.SaveChangesAsync(context.CancellationToken);
     }
 }
+
+internal sealed class TradeAmendedAuditConsumer(AuditDbContext db) : IConsumer<TradeAmended>
+{
+    public async Task Consume(ConsumeContext<TradeAmended> context)
+    {
+        var message = context.Message;
+        db.AuditEvents.Add(AuditEvent.Create(
+            message.TenantId, message.Actor, nameof(TradeAmended), "Trade", message.TradeId, message.Reason));
+        await db.SaveChangesAsync(context.CancellationToken);
+    }
+}

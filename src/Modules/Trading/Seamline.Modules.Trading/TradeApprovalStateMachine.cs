@@ -13,6 +13,7 @@ internal sealed class TradeApprovalStateMachine : MassTransitStateMachine<TradeA
     public Event<TradeApprovalRequested> TradeApprovalRequestedEvent { get; private set; } = null!;
     public Event<TradeApprovalGranted> TradeApprovalGrantedEvent { get; private set; } = null!;
     public Event<TradeApprovalDenied> TradeApprovalDeniedEvent { get; private set; } = null!;
+    public Event<TradeCancelRequested> TradeCancelRequestedEvent { get; private set; } = null!;
 
     public Schedule<TradeApprovalState, ApprovalTimeoutExpired> ApprovalTimeout { get; private set; } = null!;
 
@@ -35,6 +36,11 @@ internal sealed class TradeApprovalStateMachine : MassTransitStateMachine<TradeA
             x.OnMissingInstance(m => m.Fault());
         });
         Event(() => TradeApprovalDeniedEvent, x =>
+        {
+            x.CorrelateById(context => context.Message.TradeId);
+            x.OnMissingInstance(m => m.Fault());
+        });
+        Event(() => TradeCancelRequestedEvent, x =>
         {
             x.CorrelateById(context => context.Message.TradeId);
             x.OnMissingInstance(m => m.Fault());
@@ -70,6 +76,10 @@ internal sealed class TradeApprovalStateMachine : MassTransitStateMachine<TradeA
                 .Finalize(),
             When(ApprovalTimeout.Received)
                 .Publish(context => new TradeApprovalCompleted(context.Saga.CorrelationId, context.Saga.TenantId, Approved: false))
+                .Finalize(),
+            When(TradeCancelRequestedEvent)
+                .Unschedule(ApprovalTimeout)
+                .Publish(context => new TradeApprovalCancelled(context.Saga.CorrelationId, context.Saga.TenantId))
                 .Finalize());
 
         SetCompletedWhenFinalized();

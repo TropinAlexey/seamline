@@ -45,6 +45,7 @@ public static class TradingModuleExtensions
         });
 
         configurator.AddConsumer<TradeApprovalCompletedConsumer>();
+        configurator.AddConsumer<TradeApprovalCancelledConsumer>();
 
         configurator.AddSagaStateMachine<TradeApprovalStateMachine, TradeApprovalState>()
             .EntityFrameworkRepository(r =>

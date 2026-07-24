@@ -37,5 +37,6 @@ public static class RiskModuleExtensions
     public static void AddRiskMassTransitConfiguration(this IBusRegistrationConfigurator configurator)
     {
         configurator.AddConsumer<TradeActivatedConsumer>();
+        configurator.AddConsumer<TradeAmendedConsumer>();
     }
 }

@@ -1,4 +1,8 @@
+using System.Text;
 using MassTransit;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.Tokens;
 using Seamline.SharedKernel;
 using Seamline.Modules.Risk.Internal;
 using System.Text.Json.Serialization;
@@ -7,11 +11,35 @@ using Seamline.Modules.Trading.Internal;
 using Seamline.Modules.Reference.Internal;
 using Seamline.Modules.MarketData.Internal;
 using Seamline.Modules.Settlement.Internal;
+using Seamline.Modules.Identity.Internal;
+using Seamline.Modules.Identity.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidateAudience = false,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SigningKey"]!)),
+            ValidateLifetime = true
+        };
+    });
+
+// Every endpoint requires a valid JWT unless it opts out with
+// AllowAnonymous() (only /auth/login does) — see docs/adr/0013.
+builder.Services.AddAuthorization(options =>
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build());
 
 builder.Services.AddScoped<TenantContext>();
 builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
@@ -23,6 +51,7 @@ builder.Services.AddRiskModule(builder.Configuration);
 builder.Services.AddAuditModule(builder.Configuration);
 builder.Services.AddMarketDataModule(builder.Configuration);
 builder.Services.AddSettlementModule(builder.Configuration);
+builder.Services.AddIdentityModule(builder.Configuration);
 
 builder.Services.AddMassTransit(x =>
 {
@@ -58,6 +87,7 @@ await app.Services.MigrateRiskModuleAsync();
 await app.Services.MigrateAuditModuleAsync();
 await app.Services.MigrateMarketDataModuleAsync();
 await app.Services.MigrateSettlementModuleAsync();
+await app.Services.MigrateIdentityModuleAsync();
 
 if (app.Environment.IsDevelopment())
 {
@@ -66,22 +96,29 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Every request carries the tenant explicitly — there is no default tenant.
-// See docs/adr/0005-multi-tenancy.md.
+app.UseAuthentication();
+
+// Every authenticated request carries its tenant as a signed JWT claim, set
+// once at /auth/login — there is no default tenant, and (unlike the header
+// this replaced) it can no longer be set to an arbitrary value by the
+// caller. See docs/adr/0005-multi-tenancy.md and docs/adr/0013. /auth/login
+// itself is the one endpoint with no authenticated context yet to read a
+// tenant claim from — it sets TenantContext explicitly from its request
+// body instead (see AuthEndpoints).
 app.Use(async (context, next) =>
 {
-    if (!context.Request.Headers.TryGetValue("X-Tenant-Id", out var header) ||
-        !Guid.TryParse(header, out var tenantId))
+    var tenantClaim = context.User.FindFirst(IdentityClaimTypes.TenantId)?.Value;
+    if (tenantClaim is not null && Guid.TryParse(tenantClaim, out var tenantId))
     {
-        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-        await context.Response.WriteAsync("X-Tenant-Id header is required.");
-        return;
+        context.RequestServices.GetRequiredService<TenantContext>().SetTenant(new TenantId(tenantId));
     }
 
-    context.RequestServices.GetRequiredService<TenantContext>().SetTenant(new TenantId(tenantId));
     await next();
 });
 
+app.UseAuthorization();
+
+app.MapAuthEndpoints();
 app.MapReferenceEndpoints();
 app.MapTradingEndpoints();
 app.MapRiskEndpoints();

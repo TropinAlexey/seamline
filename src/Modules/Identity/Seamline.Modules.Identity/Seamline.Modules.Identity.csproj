@@ -1,8 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\Seamline.Modules.Identity.Contracts\Seamline.Modules.Identity.Contracts.csproj" />
     <ProjectReference Include="..\..\..\Seamline.SharedKernel\Seamline.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.21.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PasswordHasher is internal by design (see
+         Seamline.ArchTests.InternalVisibilityTests) — this lets
+         AuthTestHelper call the real hasher instead of re-deriving its
+         iteration count/salt size/format as separate literals that could
+         silently drift out of sync. Same pattern as Trading/Risk's
+         InternalsVisibleTo for their own *.Tests projects. -->
+    <InternalsVisibleTo Include="Seamline.IntegrationTests" />
   </ItemGroup>
 
   <PropertyGroup>

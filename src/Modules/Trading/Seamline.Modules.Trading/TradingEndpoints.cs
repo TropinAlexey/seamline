@@ -1,8 +1,10 @@
 using MassTransit;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Seamline.Modules.Identity.Contracts;
 using Seamline.Modules.Risk.Contracts;
 using Seamline.Modules.Trading.Contracts;
 using Seamline.SharedKernel;
@@ -30,7 +32,7 @@ public static class TradingEndpoints
             await db.SaveChangesAsync(ct);
 
             return Results.Created($"/trades/{trade.Id}", new { trade.Id });
-        });
+        }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.FrontOffice));
 
         group.MapGet("/{id:guid}", async (Guid id, TradingDbContext db, CancellationToken ct) =>
         {
@@ -74,13 +76,10 @@ public static class TradingEndpoints
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { trade.Id, trade.State, reservation.Outcome });
-        });
+        }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.FrontOffice));
 
-        group.MapPost("/{id:guid}/approve", async (Guid id, HttpRequest request, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/approve", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
         {
-            if (!IsRiskActor(request))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-
             await publisher.Publish(new TradeApprovalGranted(id), ct);
             // UseBusOutbox() buffers every Publish pending some DbContext's
             // SaveChanges in this scope — with no DbContext touched at all,
@@ -89,17 +88,14 @@ public static class TradingEndpoints
             // here, but this call still has to happen.
             await db.SaveChangesAsync(ct);
             return Results.Accepted();
-        });
+        }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.MiddleOffice));
 
-        group.MapPost("/{id:guid}/reject", async (Guid id, HttpRequest request, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/reject", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
         {
-            if (!IsRiskActor(request))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-
             await publisher.Publish(new TradeApprovalDenied(id), ct);
             await db.SaveChangesAsync(ct);
             return Results.Accepted();
-        });
+        }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.MiddleOffice));
 
         group.MapPost("/{id:guid}/cancel", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
         {
@@ -123,7 +119,7 @@ public static class TradingEndpoints
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { trade.Id, trade.State });
-        });
+        }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.FrontOffice));
 
         group.MapPost("/{id:guid}/amend", async (Guid id, AmendTradeRequest request, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
         {
@@ -137,7 +133,7 @@ public static class TradingEndpoints
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { trade.Id, trade.State, trade.Volume, trade.Price });
-        });
+        }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.FrontOffice));
 
         group.MapPost("/{id:guid}/deliver", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
         {
@@ -151,17 +147,10 @@ public static class TradingEndpoints
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { trade.Id, trade.State });
-        });
+        }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.FrontOffice));
 
         return app;
     }
-
-    // Stand-in for real authorization — there is no Identity module yet.
-    // Same pattern as the tenant header: unverified, but structurally
-    // demonstrates segregation of duties (the approver must not be the
-    // trader who booked the trade) in the code path, not just in an ADR.
-    private static bool IsRiskActor(HttpRequest request) =>
-        request.Headers.TryGetValue("X-Actor-Role", out var role) && role == "risk";
 }
 
 internal sealed record CreateTradeRequest(

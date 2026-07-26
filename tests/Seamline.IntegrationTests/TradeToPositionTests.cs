@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Seamline.Modules.Identity.Contracts;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -14,9 +15,8 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
     [Fact]
     public async Task Submitting_a_trade_within_credit_limit_updates_the_tenants_position()
     {
-        var client = factory.CreateClient();
         var tenantId = Guid.NewGuid();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId.ToString());
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
         var trade = await CreateTradeAsync(client, "POWER", "2027-03", "Buy", 100m, 45.5m, counterparty.Id);
@@ -33,15 +33,13 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
     [Fact]
     public async Task Tenants_do_not_see_each_others_positions()
     {
-        var owner = factory.CreateClient();
-        owner.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
+        var owner = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);
 
         var counterparty = await CreateCounterpartyAsync(owner, "Bravo Trading", 500_000m);
         var trade = await CreateTradeAsync(owner, "GAS", "2027-04", "Sell", 50m, 22m, counterparty.Id);
         await owner.PostAsync($"/trades/{trade.Id}/submit", content: null);
 
-        var stranger = factory.CreateClient();
-        stranger.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
+        var stranger = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);
 
         var strangerPositions = await stranger.GetFromJsonAsync<List<PositionDto>>("/positions");
 
@@ -51,8 +49,8 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
     [Fact]
     public async Task A_trade_that_breaches_the_credit_limit_waits_for_risk_approval_before_updating_the_position()
     {
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
+        var tenantId = Guid.NewGuid();
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Small Cap Co", 1_000m);
         var trade = await CreateTradeAsync(client, "GAS", "2027-04", "Buy", 1_000m, 50m, counterparty.Id); // notional 50,000 > limit 1,000
@@ -66,13 +64,12 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
         var positionsBeforeApproval = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
         Assert.Empty(positionsBeforeApproval!);
 
-        // Wrong actor: no X-Actor-Role header at all.
+        // Wrong actor: the trader (FO) who booked the trade is not MO.
         var unauthorizedApproval = await client.PostAsync($"/trades/{trade.Id}/approve", content: null);
         Assert.Equal(HttpStatusCode.Forbidden, unauthorizedApproval.StatusCode);
 
-        var approveRequest = new HttpRequestMessage(HttpMethod.Post, $"/trades/{trade.Id}/approve");
-        approveRequest.Headers.Add("X-Actor-Role", "risk");
-        var approveResponse = await client.SendAsync(approveRequest);
+        var riskClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
+        var approveResponse = await riskClient.PostAsync($"/trades/{trade.Id}/approve", content: null);
         approveResponse.EnsureSuccessStatusCode();
 
         var position = await PollForSinglePositionAsync(client);

@@ -18,6 +18,14 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Domain logic (Position, CreditReservationService) is internal by
+         design (see Seamline.ArchTests.InternalVisibilityTests) — this
+         grants the unit test project friend access instead of making it
+         public. Same pattern as Seamline.Modules.Trading.csproj. -->
+    <InternalsVisibleTo Include="Seamline.Modules.Risk.Tests" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Seamline.Modules.Risk.Internal</RootNamespace>

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Npgsql;
+using Seamline.Modules.Identity.Contracts;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -15,9 +16,8 @@ public sealed class RowLevelSecurityTests(SeamlineApiFactory factory) : IClassFi
     [Fact]
     public async Task A_raw_query_as_the_app_role_sees_only_the_tenant_set_in_the_session_variable()
     {
-        var client = factory.CreateClient();
         var ownerTenantId = Guid.NewGuid();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", ownerTenantId.ToString());
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, ownerTenantId, IdentityRoles.FrontOffice);
 
         var response = await client.PostAsJsonAsync("/counterparties/", new { name = "Acme Energy", creditLimit = 1_000_000m });
         response.EnsureSuccessStatusCode();

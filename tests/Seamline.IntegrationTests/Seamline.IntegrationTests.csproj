@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Seamline.Api\Seamline.Api.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Identity\Seamline.Modules.Identity.Contracts\Seamline.Modules.Identity.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

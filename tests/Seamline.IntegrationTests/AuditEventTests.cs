@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Npgsql;
+using Seamline.Modules.Identity.Contracts;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -12,9 +13,8 @@ public sealed class AuditEventTests(SeamlineApiFactory factory) : IClassFixture<
     [Fact]
     public async Task Activating_a_trade_records_an_audit_event_with_the_real_actor()
     {
-        var client = factory.CreateClient();
         var tenantId = Guid.NewGuid();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId.ToString());
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
 
         var counterpartyResponse = await client.PostAsJsonAsync(
             "/counterparties/", new { name = "Acme Energy", creditLimit = 1_000_000m });

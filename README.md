@@ -1,6 +1,7 @@
 <img src="docs/seamline-icon.png" alt="seamline" width="96" align="left" />
 
 # seamline
+mini CTRM demo project
 
 [![CI](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml)
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
@@ -103,6 +104,13 @@ Full reasoning: `docs/adr/0001-modular-monolith.md`.
   curve points — no interpolation, shaping, or cascading.
 - No VaR. Stress scenarios instead (Phase 2).
 - REMIT: simplified XML against a stub regulator endpoint (Phase 2).
+- Auth ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)): JWT signing
+  key lives in `appsettings.json` as a static dev-only secret, not a real
+  secrets store — fine for a local/demo project, explicitly not a
+  production posture. Three demo users (one per FO/MO/BO role) are seeded
+  by the `Identity` module's `InitialCreate` migration with a documented
+  password (`Demo-Password-123!`) for a fixed demo tenant
+  (`11111111-1111-1111-1111-111111111111`).
 
 ## ADRs
 

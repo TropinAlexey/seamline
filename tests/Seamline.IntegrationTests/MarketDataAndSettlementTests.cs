@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Seamline.Modules.Identity.Contracts;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -13,8 +14,7 @@ public sealed class MarketDataAndSettlementTests(SeamlineApiFactory factory) : I
     [Fact]
     public async Task A_position_carries_the_published_curve_price()
     {
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
         var trade = await CreateTradeAsync(client, "POWER", "2027-07", "Buy", 100m, 45.5m, counterparty.Id);
@@ -34,8 +34,8 @@ public sealed class MarketDataAndSettlementTests(SeamlineApiFactory factory) : I
     [Fact]
     public async Task Delivering_an_active_trade_creates_an_invoice_for_its_notional()
     {
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
+        var tenantId = Guid.NewGuid();
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
         var trade = await CreateTradeAsync(client, "GAS", "2027-08", "Buy", 100m, 22.5m, counterparty.Id);
@@ -45,7 +45,10 @@ public sealed class MarketDataAndSettlementTests(SeamlineApiFactory factory) : I
         var deliverResponse = await client.PostAsync($"/trades/{trade.Id}/deliver", content: null);
         deliverResponse.EnsureSuccessStatusCode();
 
-        var invoice = await PollForInvoiceAsync(client, trade.Id);
+        // GET /invoices is BO's endpoint (ADR-0013) — a separate role from
+        // the FO client that booked and delivered the trade.
+        var backOfficeClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.BackOffice);
+        var invoice = await PollForInvoiceAsync(backOfficeClient, trade.Id);
         Assert.Equal(2_250m, invoice.Amount); // 100 * 22.5
     }
 

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Seamline.Modules.Identity.Contracts;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -13,8 +14,7 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
     [Fact]
     public async Task Cancelling_a_credit_pending_trade_releases_the_reservation_and_never_creates_a_position()
     {
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Small Cap Co", 1_000m);
         var trade = await CreateTradeAsync(client, "GAS", "2027-04", "Buy", 1_000m, 50m, counterparty.Id); // notional 50,000 > limit 1,000
@@ -36,8 +36,7 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
     [Fact]
     public async Task Amending_an_active_trade_adjusts_the_position_by_the_delta()
     {
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
         var trade = await CreateTradeAsync(client, "POWER", "2027-06", "Buy", 100m, 45.5m, counterparty.Id);

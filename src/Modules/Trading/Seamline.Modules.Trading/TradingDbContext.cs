@@ -11,6 +11,7 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
 
     public DbSet<Trade> Trades => Set<Trade>();
     public DbSet<TradeHistory> TradeHistory => Set<TradeHistory>();
+    public DbSet<RemitReport> RemitReports => Set<RemitReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -80,10 +81,30 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
             builder.Property<uint>("xmin").HasColumnName("xmin").IsRowVersion();
         });
 
+        // Append-only, same shape as TradeHistory: seamline_app has
+        // SELECT/INSERT only. See ADR-0015 — a row exists only once
+        // acer-stub has acknowledged the report, no separate status column.
+        modelBuilder.Entity<RemitReport>(builder =>
+        {
+            builder.ToTable("remit_report");
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.TenantId)
+                .HasConversion(t => t.Value, v => new TenantId(v))
+                .HasColumnName("tenant_id");
+            builder.Property(r => r.TradeId).HasColumnName("trade_id");
+            builder.Property(r => r.Version).HasColumnName("version");
+            builder.Property(r => r.Action).HasColumnName("action").HasConversion<string>().HasMaxLength(20);
+            builder.Property(r => r.SubmittedAt).HasColumnName("submitted_at");
+            builder.Property(r => r.AckId).HasColumnName("ack_id").HasMaxLength(100).IsRequired();
+
+            builder.HasIndex(r => new { r.TradeId, r.Version }).IsUnique();
+            builder.HasQueryFilter(r => r.TenantId == tenantContext.TenantId);
+        });
+
         // Transactional outbox: TradeActivated/TradeRejected are written in
         // the same transaction as the trade's state change, then dispatched
-        // by MassTransit's bus outbox delivery service. See ADR-0004
-        // (outbox), when written. Tables live in messaging, not trading —
+        // by MassTransit's bus outbox delivery service. See ADR-0004.
+        // Tables live in messaging, not trading —
         // ADR-0008 calls messaging out as the one cross-cutting schema in
         // the system (transport, not domain); this DbContext just happens
         // to be the one MassTransit is wired to for Trading's outbox.

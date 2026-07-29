@@ -33,6 +33,8 @@ released, not invented to demonstrate a saga.
 ```
 Seamline.Api              (modular monolith)
 Seamline.Valuation.Worker (separate process, same database — EOD MtM)
+Seamline.Reporting.Worker (separate process, same database — EOD REMIT batch)
+Seamline.AcerStub         (stub regulator endpoint, local dev only)
 
 Modules/
   Reference/    commodities, counterparties,
@@ -47,7 +49,7 @@ Modules/
 PostgreSQL, one schema per module
 Multi-tenant: shared schema + tenant_id global filter, JWT-carried tenant claim
 MassTransit (in-memory transport in Phase 1)
-Hangfire (Valuation.Worker's EOD scheduler, Phase 2)
+Hangfire (Valuation.Worker's and Reporting.Worker's EOD schedulers, Phase 2)
 ```
 
 Each module is two projects — `Seamline.Modules.<Name>` (implementation) and
@@ -99,16 +101,21 @@ and inspects the resulting operations — including foreign keys declared
 inline inside `CreateTable`, which don't show up as a top-level operation
 and would otherwise make the check pass vacuously.
 
-Two components are extracted from the monolith on purpose: `Valuation.Worker`
-(end-of-day mark-to-market, landed) and `Reporting.Worker` (REMIT/ACER
-submission, Phase 2, not yet built). Both share the same PostgreSQL
-database — this is service-based architecture, stated as such, not
-database-per-service. `Valuation.Worker` is a second composition root, not
-a new module: it references `Risk`/`MarketData`/`Reference`'s
-implementation projects directly, the same relationship `Seamline.Api`
-already has with every module — see `docs/adr/0001` and `docs/adr/0002`
-for the extraction criteria, `docs/adr/0014` for what the worker actually
-computes.
+Two components are extracted from the monolith on purpose, and both have
+now landed: `Valuation.Worker` (end-of-day mark-to-market) and
+`Reporting.Worker` (end-of-day simplified REMIT submission). Both share the
+same PostgreSQL database — this is service-based architecture, stated as
+such, not database-per-service. Neither is a new module: each is a second
+(third) composition root referencing a module's implementation project
+directly, the same relationship `Seamline.Api` already has with every
+module — `Valuation.Worker` hosts `Risk`'s valuation logic,
+`Reporting.Worker` hosts `Trading`'s REMIT batch, both reached through one
+public extension method each rather than a curated subset of the module's
+internals. See `docs/adr/0001`/`docs/adr/0002` for the extraction criteria,
+`docs/adr/0014`/`docs/adr/0015` for what each worker actually computes.
+`Reporting.Worker` submits against `Seamline.AcerStub`, a minimal stand-in
+regulator endpoint (random 500s/timeouts/duplicates) that only exists to
+give the retry/idempotency logic something genuinely flaky to run against.
 
 ## Scope boundaries
 
@@ -117,7 +124,9 @@ computes.
 - Mark-to-market: `(forward_price − trade_price) × volume`. Flat monthly
   curve points — no interpolation, shaping, or cascading.
 - No VaR. Stress scenarios instead (Phase 2).
-- REMIT: simplified XML against a stub regulator endpoint (Phase 2).
+- REMIT: simplified XML against `Seamline.AcerStub`, a stub regulator
+  endpoint — not a compliant REMIT/ACER implementation. See
+  [ADR-0015](docs/adr/0015-reporting-worker.md).
 - Auth ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)): JWT signing
   key lives in `appsettings.json` as a static dev-only secret, not a real
   secrets store — fine for a local/demo project, explicitly not a
@@ -144,17 +153,19 @@ computes.
 | [0012](docs/adr/0012-marketdata-settlement-first-entities.md) | MarketData and Settlement's first entities |
 | [0013](docs/adr/0013-identity-custom-jwt-auth.md) | Identity: custom JWT auth, FO/MO/BO roles |
 | [0014](docs/adr/0014-valuation-worker.md) | Valuation.Worker: real mark-to-market |
+| [0015](docs/adr/0015-reporting-worker.md) | Reporting.Worker: simplified REMIT submission |
 
 More ADRs land as decisions are made — see `CLAUDE.md`.
 
 ## Running locally
 
 ```bash
-docker compose up -d          # PostgreSQL
+docker compose up -d          # PostgreSQL + acer-stub
 dotnet build SeamlineCtrm.sln
 dotnet test SeamlineCtrm.sln
 dotnet run --project src/Seamline.Api                # API — migrates every module's schema on startup
 dotnet run --project src/Seamline.Valuation.Worker    # optional — EOD MtM, same database
+dotnet run --project src/Seamline.Reporting.Worker    # optional — EOD REMIT batch, same database
 ```
 
 `POST /auth/login` with `{"tenantId": "11111111-1111-1111-1111-111111111111",
@@ -192,17 +203,31 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
   headers.
 - MarketData and Settlement's first entities ([ADR-0012](docs/adr/0012-marketdata-settlement-first-entities.md)):
   published curve points and delivery-triggered invoices.
-- 132 tests: unit (Trading, Risk, Identity), architecture, and integration
+- 139 tests: unit (Trading, Risk, Identity), architecture, and integration
   (Testcontainers + `WebApplicationFactory`).
 
-**Phase 2 started.** Landed: `Valuation.Worker`
-([ADR-0002](docs/adr/0002-service-extraction-criteria.md),
-[ADR-0014](docs/adr/0014-valuation-worker.md)) — a separate process,
-sharing the API's database, computing real end-of-day mark-to-market
-`(forward_price − trade_price) × volume` on a Hangfire recurring job,
-against a volume-weighted cost basis `Position` now tracks.
+**Phase 2 well underway.** Both processes ADR-0001 promised are now built:
+
+- `Valuation.Worker` ([ADR-0002](docs/adr/0002-service-extraction-criteria.md),
+  [ADR-0014](docs/adr/0014-valuation-worker.md)) — end-of-day mark-to-market
+  `(forward_price − trade_price) × volume` on a Hangfire recurring job,
+  against a volume-weighted cost basis `Position` now tracks.
+- `Reporting.Worker` ([ADR-0015](docs/adr/0015-reporting-worker.md)) —
+  end-of-day simplified REMIT submission, scanning `trade_history` (never
+  live `trade` state, per [ADR-0006](docs/adr/0006-audit-trail-instead-of-event-sourcing.md)'s
+  point-in-time requirement) for `New`/`Modify`/`Terminate` reports, sent
+  to `Seamline.AcerStub` through an `IHttpClientFactory` client with
+  `Microsoft.Extensions.Http.Resilience`'s standard retry/timeout/
+  circuit-breaker handler. Idempotency is presence-of-row, not a status
+  column — an unreported `trade_history` version is retried automatically
+  by the next run's `LEFT JOIN`.
+- Also written up: [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md)
+  (Hangfire vs MassTransit `Schedule<>`) and
+  [ADR-0004](docs/adr/0004-transactional-outbox.md) (transactional
+  outbox) — both document decisions already implemented in earlier
+  sessions, closed retroactively per CLAUDE.md's own exception for exactly
+  this kind of debt.
 
 Still open for Phase 2: RabbitMQ in place of the in-memory MassTransit
-transport, `Reporting.Worker` (REMIT/ACER), the rest of the Hangfire jobs
-(curve import, deadline sweeps), stress scenarios in place of VaR, and a
-MassTransit test harness.
+transport, the rest of the Hangfire jobs (curve import, deadline sweeps),
+stress scenarios in place of VaR, and a MassTransit test harness.

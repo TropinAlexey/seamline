@@ -15,6 +15,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.8.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
@@ -23,10 +24,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Domain logic (Trade, TradeHistory) is internal by design (see
-         Seamline.ArchTests.InternalVisibilityTests) — this grants the unit
-         test project friend access instead of making it public. -->
+    <!-- Domain logic (Trade, TradeHistory, RemitReport) is internal by
+         design (see Seamline.ArchTests.InternalVisibilityTests) — this
+         grants friend access instead of making it public.
+         Seamline.IntegrationTests needs it too, to substitute a fake
+         IRemitSubmissionClient in place of AddTradingReportingClient's
+         real HTTP one for deterministic Reporting.Worker tests. -->
     <InternalsVisibleTo Include="Seamline.Modules.Trading.Tests" />
+    <InternalsVisibleTo Include="Seamline.IntegrationTests" />
   </ItemGroup>
 
   <PropertyGroup>

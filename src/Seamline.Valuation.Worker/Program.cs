@@ -41,11 +41,10 @@ await host.Services.MigrateMarketDataModuleAsync();
 
 // Recurring, instance-independent work — Hangfire, not MassTransit
 // Schedule<> (that's for a timeout owned by one specific saga/process
-// instance, e.g. the credit-approval timeout in ADR-0008). See ADR-0003
-// for the rule once it's written. Resolved through DI (IRecurringJobManager)
-// rather than the static RecurringJob API — the static API relies on a
-// global JobStorage.Current that AddHangfire's service-based registration
-// doesn't set.
+// instance, e.g. the credit-approval timeout in ADR-0008). See ADR-0003.
+// Resolved through DI (IRecurringJobManager) rather than the static
+// RecurringJob API — the static API relies on a global JobStorage.Current
+// that AddHangfire's service-based registration doesn't set.
 host.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<ValuationJob>(
     "eod-valuation", job => job.RunAsync(CancellationToken.None), Cron.Daily);
 

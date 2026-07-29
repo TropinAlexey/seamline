@@ -16,5 +16,16 @@ services:
       timeout: 5s
       retries: 10
 
+  # Stand-in for ACER's real trade-report intake (ADR-0015) — not a real
+  # regulator endpoint. Returns 500/timeout/duplicate/success at random so
+  # Reporting.Worker's retry/idempotency logic has genuine flakiness to
+  # exercise, not just an assertion that it would work.
+  acer-stub:
+    build:
+      context: .
+      dockerfile: src/Seamline.AcerStub/Dockerfile
+    ports:
+      - "5299:8080"
+
 volumes:
   seamline-postgres-data:

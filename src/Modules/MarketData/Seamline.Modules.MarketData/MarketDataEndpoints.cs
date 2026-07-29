@@ -37,7 +37,7 @@ public static class MarketDataEndpoints
         group.MapGet("/", async (MarketDataDbContext db, CancellationToken ct) =>
         {
             var curvePoints = await db.PriceCurvePoints
-                .Select(p => new { p.CommodityCode, p.DeliveryPeriod, p.Price })
+                .Select(p => new { p.CommodityCode, p.DeliveryPeriod, p.Price, p.PublishedAt })
                 .ToListAsync(ct);
             return Results.Ok(curvePoints);
         });

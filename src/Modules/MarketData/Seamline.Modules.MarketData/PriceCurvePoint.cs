@@ -14,6 +14,13 @@ internal sealed class PriceCurvePoint : TenantOwnedEntity<Guid>
     public string DeliveryPeriod { get; private set; } = string.Empty;
     public decimal Price { get; private set; }
 
+    // Set on Create, bumped on every UpdatePrice. Curve points don't keep
+    // their own history (see above), so this is the only trace of "when was
+    // this price live" — Valuation.Worker (ADR-0014) copies it into each
+    // valuation_snapshot row so a snapshot stays reproducible after the
+    // live curve point is later overwritten.
+    public DateTimeOffset PublishedAt { get; private set; }
+
     private PriceCurvePoint() { }
 
     public static PriceCurvePoint Create(TenantId tenantId, string commodityCode, string deliveryPeriod, decimal price)
@@ -26,7 +33,8 @@ internal sealed class PriceCurvePoint : TenantOwnedEntity<Guid>
             TenantId = tenantId,
             CommodityCode = commodityCode,
             DeliveryPeriod = deliveryPeriod,
-            Price = price
+            Price = price,
+            PublishedAt = DateTimeOffset.UtcNow
         };
     }
 
@@ -35,6 +43,7 @@ internal sealed class PriceCurvePoint : TenantOwnedEntity<Guid>
         if (price <= 0)
             throw new ArgumentOutOfRangeException(nameof(price), "Price must be positive.");
         Price = price;
+        PublishedAt = DateTimeOffset.UtcNow;
     }
 
     private static void Validate(string commodityCode, string deliveryPeriod, decimal price)

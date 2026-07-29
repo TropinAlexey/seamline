@@ -1,5 +1,4 @@
 using MassTransit;
-using Microsoft.EntityFrameworkCore;
 using Seamline.Modules.Trading.Contracts;
 using Seamline.SharedKernel;
 
@@ -14,17 +13,10 @@ internal sealed class TradeActivatedConsumer(RiskDbContext db, TenantContext ten
 
         var signedVolume = message.Direction == TradeDirection.Buy ? message.Volume : -message.Volume;
 
-        var position = await db.Positions.FirstOrDefaultAsync(
-            p => p.CommodityCode == message.CommodityCode && p.DeliveryPeriod == message.DeliveryPeriod,
-            context.CancellationToken);
+        var position = await PositionLookup.FindOrCreateAsync(
+            db, new TenantId(message.TenantId), message.CommodityCode, message.DeliveryPeriod, context.CancellationToken);
 
-        if (position is null)
-        {
-            position = Position.Create(new TenantId(message.TenantId), message.CommodityCode, message.DeliveryPeriod);
-            db.Positions.Add(position);
-        }
-
-        position.Apply(signedVolume);
+        position.Apply(signedVolume, message.Price);
         await db.SaveChangesAsync(context.CancellationToken);
     }
 }

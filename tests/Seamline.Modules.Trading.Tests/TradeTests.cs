@@ -230,7 +230,8 @@ public class TradeTests
         Assert.Equal(trade.Id, amended.TradeId);
         Assert.Equal(100m, amended.OldVolume);
         Assert.Equal(150m, amended.NewVolume);
-        Assert.Equal(46m, amended.Price);
+        Assert.Equal(45.5m, amended.OldPrice);
+        Assert.Equal(46m, amended.NewPrice);
         Assert.Equal(trade.CommodityCode, amended.CommodityCode);
         Assert.Equal(trade.DeliveryPeriod, amended.DeliveryPeriod);
         Assert.Equal(trade.Direction, amended.Direction);
@@ -282,6 +283,9 @@ public class TradeTests
         Assert.Equal(trade.Id, delivered.TradeId);
         Assert.Equal(trade.TenantId.Value, delivered.TenantId);
         Assert.Equal(trade.CounterpartyId, delivered.CounterpartyId);
+        Assert.Equal(trade.CommodityCode, delivered.CommodityCode);
+        Assert.Equal(trade.DeliveryPeriod, delivered.DeliveryPeriod);
+        Assert.Equal(trade.Direction, delivered.Direction);
         Assert.Equal(100m, delivered.Volume);
         Assert.Equal(45.5m, delivered.Price);
         Assert.Equal("trader", delivered.Actor);

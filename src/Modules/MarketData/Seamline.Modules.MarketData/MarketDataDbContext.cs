@@ -24,6 +24,7 @@ internal sealed class MarketDataDbContext(DbContextOptions<MarketDataDbContext> 
             builder.Property(p => p.CommodityCode).HasColumnName("commodity_code").HasMaxLength(20).IsRequired();
             builder.Property(p => p.DeliveryPeriod).HasColumnName("delivery_period").HasMaxLength(7).IsRequired();
             builder.Property(p => p.Price).HasColumnName("price").HasPrecision(18, 4);
+            builder.Property(p => p.PublishedAt).HasColumnName("published_at");
 
             builder.HasIndex(p => new { p.TenantId, p.CommodityCode, p.DeliveryPeriod }).IsUnique();
             builder.HasQueryFilter(p => p.TenantId == tenantContext.TenantId);

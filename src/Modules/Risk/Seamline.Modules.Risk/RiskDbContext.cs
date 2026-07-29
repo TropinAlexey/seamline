@@ -10,6 +10,7 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
 
     public DbSet<Position> Positions => Set<Position>();
     public DbSet<CreditReservation> CreditReservations => Set<CreditReservation>();
+    public DbSet<ValuationSnapshot> ValuationSnapshots => Set<ValuationSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,6 +26,7 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
             builder.Property(p => p.CommodityCode).HasColumnName("commodity_code").HasMaxLength(20).IsRequired();
             builder.Property(p => p.DeliveryPeriod).HasColumnName("delivery_period").HasMaxLength(7).IsRequired();
             builder.Property(p => p.NetVolume).HasColumnName("net_volume").HasPrecision(18, 3);
+            builder.Property(p => p.WeightedAvgPrice).HasColumnName("weighted_avg_price").HasPrecision(18, 4);
 
             builder.HasIndex(p => new { p.TenantId, p.CommodityCode, p.DeliveryPeriod }).IsUnique();
             builder.HasQueryFilter(p => p.TenantId == tenantContext.TenantId);
@@ -45,6 +47,26 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
 
             builder.HasIndex(r => r.TradeId);
             builder.HasQueryFilter(r => r.TenantId == tenantContext.TenantId);
+        });
+
+        modelBuilder.Entity<ValuationSnapshot>(builder =>
+        {
+            builder.ToTable("valuation_snapshot");
+            builder.HasKey(v => v.Id);
+            builder.Property(v => v.TenantId)
+                .HasConversion(t => t.Value, v => new TenantId(v))
+                .HasColumnName("tenant_id");
+            builder.Property(v => v.CommodityCode).HasColumnName("commodity_code").HasMaxLength(20).IsRequired();
+            builder.Property(v => v.DeliveryPeriod).HasColumnName("delivery_period").HasMaxLength(7).IsRequired();
+            builder.Property(v => v.NetVolume).HasColumnName("net_volume").HasPrecision(18, 3);
+            builder.Property(v => v.WeightedAvgPrice).HasColumnName("weighted_avg_price").HasPrecision(18, 4);
+            builder.Property(v => v.CurvePrice).HasColumnName("curve_price").HasPrecision(18, 4);
+            builder.Property(v => v.CurvePublishedAt).HasColumnName("curve_published_at");
+            builder.Property(v => v.MtmAmount).HasColumnName("mtm_amount").HasPrecision(18, 2);
+            builder.Property(v => v.ValuedAt).HasColumnName("valued_at");
+
+            builder.HasIndex(v => new { v.TenantId, v.CommodityCode, v.DeliveryPeriod, v.ValuedAt });
+            builder.HasQueryFilter(v => v.TenantId == tenantContext.TenantId);
         });
     }
 }

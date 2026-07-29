@@ -9,7 +9,7 @@ internal sealed class CurvePointDirectory(MarketDataDbContext db) : ICurvePointD
     {
         return await db.PriceCurvePoints
             .Where(p => p.CommodityCode == commodityCode && p.DeliveryPeriod == deliveryPeriod)
-            .Select(p => new CurvePointRef(p.CommodityCode, p.DeliveryPeriod, p.Price))
+            .Select(p => new CurvePointRef(p.CommodityCode, p.DeliveryPeriod, p.Price, p.PublishedAt))
             .FirstOrDefaultAsync(cancellationToken);
     }
 }

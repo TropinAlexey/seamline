@@ -132,12 +132,13 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
             throw new ArgumentOutOfRangeException(nameof(newPrice), "Price must be positive.");
 
         var oldVolume = Volume;
+        var oldPrice = Price;
         Volume = newVolume;
         Price = newPrice;
         Version++;
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var amended = new TradeAmended(
-            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, oldVolume, Volume, Price, CounterpartyId, changedBy, changeReason);
+            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, oldVolume, Volume, oldPrice, Price, CounterpartyId, changedBy, changeReason);
         return (history, amended);
     }
 
@@ -151,7 +152,8 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         State = TradeState.Delivered;
         Version++;
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
-        var delivered = new TradeDelivered(Id, TenantId.Value, CounterpartyId, Volume, Price, changedBy, changeReason);
+        var delivered = new TradeDelivered(
+            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, Volume, Price, changedBy, changeReason);
         return (history, delivered);
     }
 

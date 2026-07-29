@@ -2,6 +2,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Seamline.Modules.Risk.Contracts;
 using Seamline.SharedKernel;
 
@@ -39,5 +40,18 @@ public static class RiskModuleExtensions
     {
         configurator.AddConsumer<TradeActivatedConsumer>();
         configurator.AddConsumer<TradeAmendedConsumer>();
+        configurator.AddConsumer<TradeDeliveredConsumer>();
+    }
+
+    // Entry point Valuation.Worker calls (ADR-0002, ADR-0014) — the actual
+    // logic lives in the internal EndOfDayValuationRunner, same reasoning
+    // as MigrateRiskModuleAsync above: Position/RiskDbContext/
+    // ValuationSnapshot are internal by design, so a separate process
+    // reaches them through one public extension method, not by referencing
+    // internals directly.
+    public static Task RunEndOfDayValuationAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
+    {
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger<EndOfDayValuationRunner>();
+        return new EndOfDayValuationRunner(services, logger).RunAsync(cancellationToken);
     }
 }

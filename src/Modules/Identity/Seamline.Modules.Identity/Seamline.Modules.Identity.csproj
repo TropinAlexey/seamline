@@ -16,13 +16,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- PasswordHasher is internal by design (see
-         Seamline.ArchTests.InternalVisibilityTests) — this lets
-         AuthTestHelper call the real hasher instead of re-deriving its
-         iteration count/salt size/format as separate literals that could
-         silently drift out of sync. Same pattern as Trading/Risk's
-         InternalsVisibleTo for their own *.Tests projects. -->
+    <!-- Domain logic (PasswordHasher, JwtTokenFactory) is internal by
+         design (see Seamline.ArchTests.InternalVisibilityTests). Grants
+         friend access instead of a public API — same pattern as
+         Trading/Risk's InternalsVisibleTo for their own *.Tests projects.
+         IntegrationTests gets it too so AuthTestHelper can call the real
+         PasswordHasher.Hash instead of re-deriving its format as separate
+         literals that could silently drift out of sync. -->
     <InternalsVisibleTo Include="Seamline.IntegrationTests" />
+    <InternalsVisibleTo Include="Seamline.Modules.Identity.Tests" />
   </ItemGroup>
 
   <PropertyGroup>

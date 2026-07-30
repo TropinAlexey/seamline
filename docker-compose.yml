@@ -27,5 +27,21 @@ services:
     ports:
       - "5299:8080"
 
+  # Custom image, not the stock rabbitmq:*-management — this one has the
+  # delayed-message-exchange plugin enabled, which the credit-approval
+  # saga's timeout needs on this transport (ADR-0017).
+  rabbitmq:
+    build:
+      context: .
+      dockerfile: docker/rabbitmq/Dockerfile
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # management UI (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 10
+
 volumes:
   seamline-postgres-data:

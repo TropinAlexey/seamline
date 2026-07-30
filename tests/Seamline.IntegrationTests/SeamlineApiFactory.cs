@@ -8,6 +8,19 @@ namespace Seamline.IntegrationTests;
 
 public sealed class SeamlineApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    // Program.cs reads MessageBroker:Transport synchronously, before
+    // builder.Build() — by which point ConfigureWebHost's
+    // ConfigureAppConfiguration override hasn't been applied yet (it's
+    // wired in at Build() time). An env var, read as part of
+    // WebApplication.CreateBuilder(args) itself, is early enough; set it
+    // once, statically, before any host in this test run gets created.
+    // Process-wide and never unset — safe only because every
+    // SeamlineApiFactory in this test run wants the same value.
+    static SeamlineApiFactory()
+    {
+        Environment.SetEnvironmentVariable("MessageBroker__Transport", "InMemory");
+    }
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine")
         .WithUsername("seamline")
         .WithPassword("seamline")

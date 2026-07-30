@@ -60,11 +60,16 @@ builder.Services.AddMassTransit(x =>
     x.AddAuditMassTransitConfiguration();
     x.AddSettlementMassTransitConfiguration();
 
-    x.UsingInMemory((context, cfg) =>
+    // Shared by both transports (ADR-0017) — only the host/credentials setup
+    // below differs between them.
+    void ConfigurePipeline<TEndpoint>(IBusFactoryConfigurator<TEndpoint> cfg, IBusRegistrationContext context)
+        where TEndpoint : IReceiveEndpointConfigurator
     {
         // The credit-limit saga's approval timeout (ADR-0008) uses
         // MassTransit's own Schedule<>, not Hangfire — Hangfire is for work
         // that isn't tied to a specific saga instance (EOD jobs, sweeps).
+        // On RabbitMQ this needs the delayed-message-exchange plugin
+        // (docker/rabbitmq/Dockerfile).
         cfg.UseDelayedMessageScheduler();
 
         // Covers the outbox's polling delay: an approve/reject can arrive
@@ -76,7 +81,31 @@ builder.Services.AddMassTransit(x =>
         cfg.UseMessageRetry(r => r.Intervals(100, 250, 500, 1000, 2000));
 
         cfg.ConfigureEndpoints(context);
-    });
+    }
+
+    // Tests set this to "InMemory" (SeamlineApiFactory) so every existing
+    // integration test keeps running without a real broker; local dev and
+    // everything else defaults to RabbitMQ (ADR-0017).
+    if (builder.Configuration["MessageBroker:Transport"] == "InMemory")
+    {
+        x.UsingInMemory((context, cfg) => ConfigurePipeline(cfg, context));
+    }
+    else
+    {
+        x.UsingRabbitMq((context, cfg) =>
+        {
+            cfg.Host(
+                builder.Configuration["MessageBroker:RabbitMq:Host"] ?? "localhost",
+                builder.Configuration["MessageBroker:RabbitMq:VirtualHost"] ?? "/",
+                h =>
+                {
+                    h.Username(builder.Configuration["MessageBroker:RabbitMq:Username"] ?? "guest");
+                    h.Password(builder.Configuration["MessageBroker:RabbitMq:Password"] ?? "guest");
+                });
+
+            ConfigurePipeline(cfg, context);
+        });
+    }
 });
 
 var app = builder.Build();

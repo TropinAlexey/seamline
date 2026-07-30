@@ -48,7 +48,7 @@ Modules/
 
 PostgreSQL, one schema per module
 Multi-tenant: shared schema + tenant_id global filter, JWT-carried tenant claim
-MassTransit (in-memory transport in Phase 1)
+MassTransit (RabbitMQ transport; in-memory for tests — ADR-0017)
 Hangfire (Valuation.Worker's and Reporting.Worker's EOD schedulers, Phase 2)
 ```
 
@@ -157,13 +157,14 @@ give the retry/idempotency logic something genuinely flaky to run against.
 | [0014](docs/adr/0014-valuation-worker.md) | Valuation.Worker: real mark-to-market |
 | [0015](docs/adr/0015-reporting-worker.md) | Reporting.Worker: simplified REMIT submission |
 | [0016](docs/adr/0016-stress-scenarios.md) | Stress scenarios instead of VaR: flat and single-commodity shocks |
+| [0017](docs/adr/0017-rabbitmq-transport.md) | RabbitMQ transport, config-driven; in-memory transport for tests |
 
 More ADRs land as decisions are made — see `CLAUDE.md`.
 
 ## Running locally
 
 ```bash
-docker compose up -d          # PostgreSQL + acer-stub
+docker compose up -d          # PostgreSQL + acer-stub + RabbitMQ
 dotnet build SeamlineCtrm.sln
 dotnet test SeamlineCtrm.sln
 dotnet run --project src/Seamline.Api                # API — migrates every module's schema on startup
@@ -206,7 +207,7 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
   headers.
 - MarketData and Settlement's first entities ([ADR-0012](docs/adr/0012-marketdata-settlement-first-entities.md)):
   published curve points and delivery-triggered invoices.
-- 151 tests: unit (Trading, Risk, Identity), architecture, and integration
+- 156 tests: unit (Trading, Risk, Identity), architecture, and integration
   (Testcontainers + `WebApplicationFactory`).
 
 **Phase 2 well underway.** Both processes ADR-0001 promised are now built,
@@ -240,7 +241,17 @@ CLAUDE.md's "No VaR. Stress scenarios instead" is now true in code:
   outbox) — both document decisions already implemented in earlier
   sessions, closed retroactively per CLAUDE.md's own exception for exactly
   this kind of debt.
+- RabbitMQ transport ([ADR-0017](docs/adr/0017-rabbitmq-transport.md)) — a
+  purpose-built image (`docker/rabbitmq/Dockerfile`) with the
+  delayed-message-exchange plugin the credit-approval saga's timeout needs;
+  `Seamline.Api` picks the transport via `MessageBroker:Transport`,
+  defaulting to RabbitMQ, with integration tests pinned to the in-memory
+  transport so they stay fast. Publishers and consumers didn't change — the
+  "transport swap is config, not a rewrite" prediction from ADR-0009 held.
+- A MassTransit test harness for `TradeApprovalStateMachine` — the saga's
+  approve/deny/cancel transitions and its fault-on-missing-instance
+  correlation, exercised in-process via `AddMassTransitTestHarness`, no
+  HTTP/Postgres/broker round trip.
 
-Still open for Phase 2: RabbitMQ in place of the in-memory MassTransit
-transport, the rest of the Hangfire jobs (curve import, deadline sweeps),
-and a MassTransit test harness.
+Still open for Phase 2: the rest of the Hangfire jobs (curve import,
+deadline sweeps).

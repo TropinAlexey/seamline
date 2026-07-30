@@ -32,10 +32,7 @@ internal sealed class ValuationSnapshot : TenantOwnedEntity<Guid>
         decimal curvePrice,
         DateTimeOffset curvePublishedAt)
     {
-        // ADR-0007: rounding is explicit, named, at the point it happens —
-        // never implicit via column scale. MtM = (forward_price -
-        // trade_price) * volume, rounded once, here, at persistence.
-        var mtmAmount = Math.Round((curvePrice - weightedAvgPrice) * netVolume, 2, MidpointRounding.ToEven);
+        var mtmAmount = MtmCalculator.Calculate(curvePrice, weightedAvgPrice, netVolume);
 
         return new ValuationSnapshot
         {

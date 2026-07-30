@@ -11,6 +11,7 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
     public DbSet<Position> Positions => Set<Position>();
     public DbSet<CreditReservation> CreditReservations => Set<CreditReservation>();
     public DbSet<ValuationSnapshot> ValuationSnapshots => Set<ValuationSnapshot>();
+    public DbSet<StressScenarioResult> StressScenarioResults => Set<StressScenarioResult>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -67,6 +68,27 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
 
             builder.HasIndex(v => new { v.TenantId, v.CommodityCode, v.DeliveryPeriod, v.ValuedAt });
             builder.HasQueryFilter(v => v.TenantId == tenantContext.TenantId);
+        });
+
+        modelBuilder.Entity<StressScenarioResult>(builder =>
+        {
+            builder.ToTable("stress_scenario_result");
+            builder.HasKey(s => s.Id);
+            builder.Property(s => s.TenantId)
+                .HasConversion(t => t.Value, v => new TenantId(v))
+                .HasColumnName("tenant_id");
+            builder.Property(s => s.CommodityCode).HasColumnName("commodity_code").HasMaxLength(20).IsRequired();
+            builder.Property(s => s.DeliveryPeriod).HasColumnName("delivery_period").HasMaxLength(7).IsRequired();
+            builder.Property(s => s.NetVolume).HasColumnName("net_volume").HasPrecision(18, 3);
+            builder.Property(s => s.WeightedAvgPrice).HasColumnName("weighted_avg_price").HasPrecision(18, 4);
+            builder.Property(s => s.ScenarioType).HasColumnName("scenario_type").HasConversion<string>().HasMaxLength(30);
+            builder.Property(s => s.ShockPercentage).HasColumnName("shock_percentage").HasPrecision(6, 2);
+            builder.Property(s => s.ShockedPrice).HasColumnName("shocked_price").HasPrecision(18, 4);
+            builder.Property(s => s.MtmAmount).HasColumnName("mtm_amount").HasPrecision(18, 2);
+            builder.Property(s => s.ValuedAt).HasColumnName("valued_at");
+
+            builder.HasIndex(s => new { s.TenantId, s.CommodityCode, s.DeliveryPeriod, s.ValuedAt });
+            builder.HasQueryFilter(s => s.TenantId == tenantContext.TenantId);
         });
     }
 }

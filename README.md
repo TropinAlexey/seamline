@@ -123,7 +123,9 @@ give the retry/idempotency logic something genuinely flaky to run against.
 - Monthly delivery periods only.
 - Mark-to-market: `(forward_price − trade_price) × volume`. Flat monthly
   curve points — no interpolation, shaping, or cascading.
-- No VaR. Stress scenarios instead (Phase 2).
+- No VaR. Stress scenarios instead ([ADR-0016](docs/adr/0016-stress-scenarios.md)):
+  a flat ±10% shock across every curve, and a sharper ±25% shock isolated
+  to a position's own commodity — fixed magnitudes, not user-configurable.
 - REMIT: simplified XML against `Seamline.AcerStub`, a stub regulator
   endpoint — not a compliant REMIT/ACER implementation. See
   [ADR-0015](docs/adr/0015-reporting-worker.md).
@@ -154,6 +156,7 @@ give the retry/idempotency logic something genuinely flaky to run against.
 | [0013](docs/adr/0013-identity-custom-jwt-auth.md) | Identity: custom JWT auth, FO/MO/BO roles |
 | [0014](docs/adr/0014-valuation-worker.md) | Valuation.Worker: real mark-to-market |
 | [0015](docs/adr/0015-reporting-worker.md) | Reporting.Worker: simplified REMIT submission |
+| [0016](docs/adr/0016-stress-scenarios.md) | Stress scenarios instead of VaR: flat and single-commodity shocks |
 
 More ADRs land as decisions are made — see `CLAUDE.md`.
 
@@ -203,10 +206,12 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
   headers.
 - MarketData and Settlement's first entities ([ADR-0012](docs/adr/0012-marketdata-settlement-first-entities.md)):
   published curve points and delivery-triggered invoices.
-- 139 tests: unit (Trading, Risk, Identity), architecture, and integration
+- 151 tests: unit (Trading, Risk, Identity), architecture, and integration
   (Testcontainers + `WebApplicationFactory`).
 
-**Phase 2 well underway.** Both processes ADR-0001 promised are now built:
+**Phase 2 well underway.** Both processes ADR-0001 promised are now built,
+plus stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)) —
+CLAUDE.md's "No VaR. Stress scenarios instead" is now true in code:
 
 - `Valuation.Worker` ([ADR-0002](docs/adr/0002-service-extraction-criteria.md),
   [ADR-0014](docs/adr/0014-valuation-worker.md)) — end-of-day mark-to-market
@@ -221,6 +226,14 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
   circuit-breaker handler. Idempotency is presence-of-row, not a status
   column — an unreported `trade_history` version is retried automatically
   by the next run's `LEFT JOIN`.
+- Stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)) —
+  a flat ±10% shock and a sharper ±25% single-commodity shock, computed
+  inside the same EOD pass as real valuation (no extra queries, riding on
+  the `Position`/curve price the run already fetched) and persisted to
+  `stress_scenario_result`, same append-only/RLS shape as
+  `valuation_snapshot`. Built test-first: the shared `MtmCalculator` and
+  `StressScenarioResult.Create` were driven out by unit tests before the
+  runner was extended to call them.
 - Also written up: [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md)
   (Hangfire vs MassTransit `Schedule<>`) and
   [ADR-0004](docs/adr/0004-transactional-outbox.md) (transactional
@@ -230,4 +243,4 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
 
 Still open for Phase 2: RabbitMQ in place of the in-memory MassTransit
 transport, the rest of the Hangfire jobs (curve import, deadline sweeps),
-stress scenarios in place of VaR, and a MassTransit test harness.
+and a MassTransit test harness.

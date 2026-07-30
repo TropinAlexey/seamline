@@ -16,6 +16,19 @@ namespace Seamline.Modules.Risk.Internal;
 // reaching into Risk's internals directly.
 internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger<EndOfDayValuationRunner> logger)
 {
+    // Fixed scenarios (ADR-0016) — not user-configurable. Flat and
+    // single-commodity deliberately use different magnitudes: at the same
+    // magnitude the two scenario types would produce identical MtM for
+    // every position, since a position's MtM only ever depends on its own
+    // commodity's curve price.
+    private static readonly (ScenarioType Type, decimal Percentage)[] Scenarios =
+    [
+        (ScenarioType.FlatShock, 10m),
+        (ScenarioType.FlatShock, -10m),
+        (ScenarioType.SingleCommodityShock, 25m),
+        (ScenarioType.SingleCommodityShock, -25m)
+    ];
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         var tenantIds = await DiscoverTenantIdsWithOpenPositionsAsync(cancellationToken);
@@ -51,6 +64,15 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
             db.ValuationSnapshots.Add(ValuationSnapshot.Create(
                 new TenantId(tenantId), position.CommodityCode, position.DeliveryPeriod,
                 position.NetVolume, position.WeightedAvgPrice, curvePoint.Price, curvePoint.PublishedAt));
+
+            // Rides along on the same Position/curvePoint this pass already
+            // fetched — no separate query, no separate batch (ADR-0016).
+            foreach (var (scenarioType, percentage) in Scenarios)
+            {
+                db.StressScenarioResults.Add(StressScenarioResult.Create(
+                    new TenantId(tenantId), position.CommodityCode, position.DeliveryPeriod,
+                    position.NetVolume, position.WeightedAvgPrice, curvePoint.Price, scenarioType, percentage));
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);

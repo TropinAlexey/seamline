@@ -23,7 +23,9 @@ builder.Services.AddScoped<TenantSessionVariableInterceptor>();
 builder.Services.AddReferenceModule(builder.Configuration);
 builder.Services.AddRiskModule(builder.Configuration);
 builder.Services.AddMarketDataModule(builder.Configuration);
+builder.Services.AddMarketDataCurveImportSources(builder.Configuration);
 builder.Services.AddScoped<ValuationJob>();
+builder.Services.AddScoped<CurveImportJob>();
 
 // Hangfire's own job-storage tables live in the same database as
 // everything else (ADR-0002 — a process split, not a database split),
@@ -45,7 +47,13 @@ await host.Services.MigrateMarketDataModuleAsync();
 // Resolved through DI (IRecurringJobManager) rather than the static
 // RecurringJob API — the static API relies on a global JobStorage.Current
 // that AddHangfire's service-based registration doesn't set.
+//
+// curve-import runs an hour ahead of eod-valuation (ADR-0018) — separate
+// Hangfire recurring jobs instead of one combined job, since two
+// same-time Cron.Daily entries have no guaranteed relative order.
+host.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<CurveImportJob>(
+    "curve-import", job => job.RunAsync(CancellationToken.None), Cron.Daily(5));
 host.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<ValuationJob>(
-    "eod-valuation", job => job.RunAsync(CancellationToken.None), Cron.Daily);
+    "eod-valuation", job => job.RunAsync(CancellationToken.None), Cron.Daily(6));
 
 await host.RunAsync();

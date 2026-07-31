@@ -6,6 +6,9 @@ mini SaaS CTRM demo project
 [![CI](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml)
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white)
+![RabbitMQ](https://img.shields.io/badge/RabbitMQ-FF6600?logo=rabbitmq&logoColor=white)
+![MassTransit](https://img.shields.io/badge/MassTransit-8.5.10-2C2C2C)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
 forwards, in .NET 10 — a modular monolith with boundaries enforced in CI, and
@@ -32,7 +35,7 @@ released, not invented to demonstrate a saga.
 
 ```
 Seamline.Api              (modular monolith)
-Seamline.Valuation.Worker (separate process, same database — EOD MtM)
+Seamline.Valuation.Worker (separate process, same database — EOD MtM, curve import)
 Seamline.Reporting.Worker (separate process, same database — EOD REMIT batch)
 Seamline.AcerStub         (stub regulator endpoint, local dev only)
 
@@ -158,6 +161,7 @@ give the retry/idempotency logic something genuinely flaky to run against.
 | [0015](docs/adr/0015-reporting-worker.md) | Reporting.Worker: simplified REMIT submission |
 | [0016](docs/adr/0016-stress-scenarios.md) | Stress scenarios instead of VaR: flat and single-commodity shocks |
 | [0017](docs/adr/0017-rabbitmq-transport.md) | RabbitMQ transport, config-driven; in-memory transport for tests |
+| [0018](docs/adr/0018-curve-import.md) | Curve import: real free day-ahead sources (ENTSO-E, EIA), synthetic default |
 
 More ADRs land as decisions are made — see `CLAUDE.md`.
 
@@ -168,9 +172,16 @@ docker compose up -d          # PostgreSQL + acer-stub + RabbitMQ
 dotnet build SeamlineCtrm.sln
 dotnet test SeamlineCtrm.sln
 dotnet run --project src/Seamline.Api                # API — migrates every module's schema on startup
-dotnet run --project src/Seamline.Valuation.Worker    # optional — EOD MtM, same database
+dotnet run --project src/Seamline.Valuation.Worker    # optional — EOD MtM + curve import, same database
 dotnet run --project src/Seamline.Reporting.Worker    # optional — EOD REMIT batch, same database
 ```
+
+Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) uses a synthetic
+price source by default — no configuration needed. To opt a commodity into
+a real source, set `MarketData:CurveImport:Sources:POWER=EntsoE` (with
+`MarketData:CurveImport:EntsoE:ApiToken`, a free ENTSO-E Transparency
+Platform token) or `MarketData:CurveImport:Sources:GAS=Eia` (with
+`MarketData:CurveImport:Eia:ApiKey`, a free EIA Open Data API key).
 
 `POST /auth/login` with `{"tenantId": "11111111-1111-1111-1111-111111111111",
 "login": "trader", "password": "Demo-Password-123!"}` (or `risk`/`backoffice`
@@ -207,8 +218,8 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
   headers.
 - MarketData and Settlement's first entities ([ADR-0012](docs/adr/0012-marketdata-settlement-first-entities.md)):
   published curve points and delivery-triggered invoices.
-- 156 tests: unit (Trading, Risk, Identity), architecture, and integration
-  (Testcontainers + `WebApplicationFactory`).
+- 169 tests: unit (Trading, Risk, Identity, MarketData), architecture, and
+  integration (Testcontainers + `WebApplicationFactory`).
 
 **Phase 2 well underway.** Both processes ADR-0001 promised are now built,
 plus stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)) —
@@ -252,6 +263,20 @@ CLAUDE.md's "No VaR. Stress scenarios instead" is now true in code:
   approve/deny/cancel transitions and its fault-on-missing-instance
   correlation, exercised in-process via `AddMassTransitTestHarness`, no
   HTTP/Postgres/broker round trip.
+- Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) — `Valuation.Worker`
+  refreshes `PriceCurvePoint` automatically on a `Cron.Daily(5)` recurring
+  job, an hour ahead of EOD valuation. `ICurveSource` is config-driven per
+  commodity: a deterministic `SyntheticCurveSource` by default (no API
+  keys, `docker compose up` still works out of the box), or real day-ahead
+  spot data — ENTSO-E Transparency Platform for POWER, the EIA Open Data
+  API's Henry Hub series for GAS (US data standing in for a
+  European-framed gas commodity, a documented mismatch, not a hidden one)
+  — both the only genuinely free/open sources found; neither publishes a
+  real multi-month forward curve, so each month's flat price is the
+  average of that commodity's daily spot price across the month's elapsed
+  days. Only refreshes a `(tenant, commodity)` pair that has already been
+  published at least once — it keeps existing curve points fresh, it
+  doesn't invent new ones.
 
-Still open for Phase 2: the rest of the Hangfire jobs (curve import,
-deadline sweeps).
+Still open for Phase 2: deadline sweeps and a Hangfire dashboard behind
+auth.

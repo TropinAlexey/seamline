@@ -6,7 +6,10 @@ namespace Seamline.Modules.Risk.Contracts;
 public interface ICreditReservationService
 {
     Task<CreditReservationResult> TryReserveAsync(
-        Guid tenantId, Guid counterpartyId, Guid tradeId, decimal notionalAmount, CancellationToken cancellationToken = default);
+        Guid tenantId, Guid counterpartyId, Guid tradeId,
+        string commodityCode, string deliveryPeriod,
+        decimal signedVolume, decimal tradePrice,
+        CancellationToken cancellationToken = default);
 
     Task FinalizeAsync(Guid tradeId, CancellationToken cancellationToken = default);
 

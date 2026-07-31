@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\src\Modules\Risk\Seamline.Modules.Risk\Seamline.Modules.Risk.csproj" />
     <ProjectReference Include="..\..\src\Modules\Risk\Seamline.Modules.Risk.Contracts\Seamline.Modules.Risk.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Modules\Reference\Seamline.Modules.Reference.Contracts\Seamline.Modules.Reference.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Modules\MarketData\Seamline.Modules.MarketData.Contracts\Seamline.Modules.MarketData.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Seamline.SharedKernel\Seamline.SharedKernel.csproj" />
   </ItemGroup>
 

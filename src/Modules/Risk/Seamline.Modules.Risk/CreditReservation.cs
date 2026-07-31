@@ -15,13 +15,21 @@ internal sealed class CreditReservation : TenantOwnedEntity<Guid>
 {
     public Guid CounterpartyId { get; private set; }
     public Guid TradeId { get; private set; }
+    public string CommodityCode { get; private set; } = string.Empty;
+    public string DeliveryPeriod { get; private set; } = string.Empty;
+    public decimal SignedVolume { get; private set; }
+    public decimal TradePrice { get; private set; }
     public decimal Amount { get; private set; }
     public CreditReservationStatus Status { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
     private CreditReservation() { }
 
-    public static CreditReservation Create(TenantId tenantId, Guid counterpartyId, Guid tradeId, decimal amount, CreditReservationStatus status)
+    public static CreditReservation Create(
+        TenantId tenantId, Guid counterpartyId, Guid tradeId,
+        string commodityCode, string deliveryPeriod,
+        decimal signedVolume, decimal tradePrice,
+        decimal exposureAmount, CreditReservationStatus status)
     {
         return new CreditReservation
         {
@@ -29,7 +37,11 @@ internal sealed class CreditReservation : TenantOwnedEntity<Guid>
             TenantId = tenantId,
             CounterpartyId = counterpartyId,
             TradeId = tradeId,
-            Amount = amount,
+            CommodityCode = commodityCode,
+            DeliveryPeriod = deliveryPeriod,
+            SignedVolume = signedVolume,
+            TradePrice = tradePrice,
+            Amount = exposureAmount,
             Status = status,
             CreatedAt = DateTimeOffset.UtcNow
         };

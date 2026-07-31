@@ -42,6 +42,10 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
                 .HasColumnName("tenant_id");
             builder.Property(r => r.CounterpartyId).HasColumnName("counterparty_id");
             builder.Property(r => r.TradeId).HasColumnName("trade_id");
+            builder.Property(r => r.CommodityCode).HasColumnName("commodity_code").HasMaxLength(20).IsRequired();
+            builder.Property(r => r.DeliveryPeriod).HasColumnName("delivery_period").HasMaxLength(7).IsRequired();
+            builder.Property(r => r.SignedVolume).HasColumnName("signed_volume").HasPrecision(18, 3);
+            builder.Property(r => r.TradePrice).HasColumnName("trade_price").HasPrecision(18, 4);
             builder.Property(r => r.Amount).HasColumnName("amount").HasPrecision(18, 4);
             builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
             builder.Property(r => r.CreatedAt).HasColumnName("created_at");

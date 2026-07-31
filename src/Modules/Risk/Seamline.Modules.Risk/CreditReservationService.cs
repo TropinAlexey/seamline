@@ -1,28 +1,36 @@
 using Microsoft.EntityFrameworkCore;
+using Seamline.Modules.MarketData.Contracts;
 using Seamline.Modules.Reference.Contracts;
 using Seamline.Modules.Risk.Contracts;
 using Seamline.SharedKernel;
 
 namespace Seamline.Modules.Risk.Internal;
 
-internal sealed class CreditReservationService(RiskDbContext db, ICounterpartyDirectory counterpartyDirectory) : ICreditReservationService
+internal sealed class CreditReservationService(
+    RiskDbContext db,
+    ICounterpartyDirectory counterpartyDirectory,
+    ICurvePointDirectory curvePointDirectory) : ICreditReservationService
 {
     public async Task<CreditReservationResult> TryReserveAsync(
-        Guid tenantId, Guid counterpartyId, Guid tradeId, decimal notionalAmount, CancellationToken cancellationToken = default)
+        Guid tenantId, Guid counterpartyId, Guid tradeId,
+        string commodityCode, string deliveryPeriod,
+        decimal signedVolume, decimal tradePrice,
+        CancellationToken cancellationToken = default)
     {
         var counterparty = await counterpartyDirectory.FindAsync(counterpartyId, cancellationToken)
             ?? throw new InvalidOperationException($"Counterparty {counterpartyId} not found.");
 
-        // Notional (Volume x Price), not mark-to-market: there's no
-        // Valuation.Worker yet to produce (forward_price - trade_price) x
-        // volume. Real MtM-based exposure replaces this in Phase 2 — see
-        // CTRM_Domain notes on the actual formula.
-        var existingExposure = await db.CreditReservations
+        var activeReservations = await db.CreditReservations
             .Where(r => r.CounterpartyId == counterpartyId &&
                         (r.Status == CreditReservationStatus.Reserved || r.Status == CreditReservationStatus.Provisional))
-            .SumAsync(r => r.Amount, cancellationToken);
+            .ToListAsync(cancellationToken);
 
-        var projectedExposure = existingExposure + notionalAmount;
+        var existingExposure = 0m;
+        foreach (var r in activeReservations)
+            existingExposure += await ComputeExposureAsync(r.CommodityCode, r.DeliveryPeriod, r.SignedVolume, r.TradePrice, cancellationToken);
+
+        var newTradeExposure = await ComputeExposureAsync(commodityCode, deliveryPeriod, signedVolume, tradePrice, cancellationToken);
+        var projectedExposure = existingExposure + newTradeExposure;
         var tenant = new TenantId(tenantId);
 
         var outcome = projectedExposure <= counterparty.CreditLimit
@@ -33,7 +41,10 @@ internal sealed class CreditReservationService(RiskDbContext db, ICounterpartyDi
             ? CreditReservationStatus.Reserved
             : CreditReservationStatus.Provisional;
 
-        db.CreditReservations.Add(CreditReservation.Create(tenant, counterpartyId, tradeId, notionalAmount, status));
+        db.CreditReservations.Add(CreditReservation.Create(
+            tenant, counterpartyId, tradeId,
+            commodityCode, deliveryPeriod, signedVolume, tradePrice,
+            newTradeExposure, status));
         await db.SaveChangesAsync(cancellationToken);
 
         return new CreditReservationResult(outcome, existingExposure, counterparty.CreditLimit);
@@ -51,6 +62,21 @@ internal sealed class CreditReservationService(RiskDbContext db, ICounterpartyDi
         var reservation = await RequireReservationAsync(tradeId, cancellationToken);
         reservation.Release();
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    // ponytail: max(0, MtM) per trade — standard replacement-cost credit exposure.
+    // Falls back to notional when no curve point exists yet (fresh commodity/period).
+    private async Task<decimal> ComputeExposureAsync(
+        string commodityCode, string deliveryPeriod,
+        decimal signedVolume, decimal tradePrice,
+        CancellationToken cancellationToken)
+    {
+        var curvePoint = await curvePointDirectory.FindAsync(commodityCode, deliveryPeriod, cancellationToken);
+        if (curvePoint is null)
+            return Math.Abs(signedVolume * tradePrice);
+
+        var mtm = MtmCalculator.Calculate(curvePoint.Price, tradePrice, signedVolume);
+        return Math.Max(0m, mtm);
     }
 
     private async Task<CreditReservation> RequireReservationAsync(Guid tradeId, CancellationToken cancellationToken)

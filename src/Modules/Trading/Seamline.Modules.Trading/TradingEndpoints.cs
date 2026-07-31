@@ -57,8 +57,10 @@ public static class TradingEndpoints
             var submitHistory = trade.Submit("trader", "Submitted for credit check");
             db.TradeHistory.Add(submitHistory);
 
+            var signedVolume = trade.Direction == TradeDirection.Buy ? trade.Volume : -trade.Volume;
             var reservation = await creditReservationService.TryReserveAsync(
-                tenant.TenantId.Value, trade.CounterpartyId, trade.Id, trade.Notional, ct);
+                tenant.TenantId.Value, trade.CounterpartyId, trade.Id,
+                trade.CommodityCode, trade.DeliveryPeriod, signedVolume, trade.Price, ct);
 
             if (reservation.Outcome == CreditReservationOutcome.Reserved)
             {

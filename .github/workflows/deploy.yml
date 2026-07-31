@@ -1,0 +1,65 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "docker/**"
+      - ".github/workflows/deploy.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+  ECS_CLUSTER: seamline
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: seamline-api
+            dockerfile: src/Seamline.Api/Dockerfile
+            ecs_service: api
+          - service: seamline-valuation-worker
+            dockerfile: src/Seamline.Valuation.Worker/Dockerfile
+            ecs_service: valuation-worker
+          - service: seamline-reporting-worker
+            dockerfile: src/Seamline.Reporting.Worker/Dockerfile
+            ecs_service: reporting-worker
+          - service: seamline-acer-stub
+            dockerfile: src/Seamline.AcerStub/Dockerfile
+            ecs_service: acer-stub
+          - service: seamline-rabbitmq
+            dockerfile: docker/rabbitmq/Dockerfile
+            ecs_service: rabbitmq
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f ${{ matrix.dockerfile }} -t $REGISTRY/${{ matrix.service }}:$IMAGE_TAG -t $REGISTRY/${{ matrix.service }}:latest .
+          docker push $REGISTRY/${{ matrix.service }}:$IMAGE_TAG
+          docker push $REGISTRY/${{ matrix.service }}:latest
+
+      - name: Deploy to ECS
+        run: aws ecs update-service --cluster $ECS_CLUSTER --service ${{ matrix.ecs_service }} --force-new-deployment --no-cli-pager

@@ -13,11 +13,30 @@ using Seamline.Modules.MarketData.Internal;
 using Seamline.Modules.Settlement.Internal;
 using Seamline.Modules.Identity.Internal;
 using Seamline.Modules.Identity.Contracts;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("seamline-api"))
+    .WithTracing(t => t
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddSource("Npgsql")
+        .AddSource("MassTransit")
+        .AddOtlpExporter())
+    .WithMetrics(m => m
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddOtlpExporter());
+
+builder.Services.AddHealthChecks()
+    .AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!, name: "postgres");
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -110,6 +129,8 @@ builder.Services.AddMassTransit(x =>
 
 var app = builder.Build();
 
+await EnsureAppRoleAsync(app.Configuration);
+
 await app.Services.MigrateReferenceModuleAsync();
 await app.Services.MigrateTradingModuleAsync();
 await app.Services.MigrateRiskModuleAsync();
@@ -147,6 +168,8 @@ app.Use(async (context, next) =>
 
 app.UseAuthorization();
 
+app.MapHealthChecks("/health").AllowAnonymous();
+
 app.MapAuthEndpoints();
 app.MapReferenceEndpoints();
 app.MapTradingEndpoints();
@@ -155,3 +178,37 @@ app.MapMarketDataEndpoints();
 app.MapSettlementEndpoints();
 
 app.Run();
+
+// Idempotent: creates the restricted seamline_app role if it doesn't exist.
+// In Docker this role is created by docker/postgres-init/01-create-app-role.sql;
+// on RDS (or any fresh Postgres) nothing pre-seeds it, but every module
+// migration GRANTs permissions to it — so the role must exist before the
+// first migration runs.
+static async Task EnsureAppRoleAsync(IConfiguration configuration)
+{
+    var migratorConn = configuration.GetConnectionString("PostgresMigrator")
+        ?? throw new InvalidOperationException("PostgresMigrator connection string is required.");
+    var appConn = configuration.GetConnectionString("Postgres")
+        ?? throw new InvalidOperationException("Postgres connection string is required.");
+
+    var appConnBuilder = new Npgsql.NpgsqlConnectionStringBuilder(appConn);
+    var migratorConnBuilder = new Npgsql.NpgsqlConnectionStringBuilder(migratorConn);
+    var appUser = appConnBuilder.Username ?? "seamline_app";
+    var appPassword = appConnBuilder.Password ?? "seamline_app";
+    var dbName = migratorConnBuilder.Database ?? "seamline";
+
+    await using var conn = new Npgsql.NpgsqlConnection(migratorConn);
+    await conn.OpenAsync();
+
+    await using var cmd = conn.CreateCommand();
+    cmd.CommandText = $"""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{appUser}') THEN
+                EXECUTE format('CREATE ROLE %I WITH LOGIN PASSWORD %L', '{appUser}', '{appPassword}');
+                EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', '{dbName}', '{appUser}');
+            END IF;
+        END $$;
+        """;
+    await cmd.ExecuteNonQueryAsync();
+}

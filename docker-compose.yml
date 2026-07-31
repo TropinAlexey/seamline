@@ -16,10 +16,22 @@ services:
       timeout: 5s
       retries: 10
 
-  # Stand-in for ACER's real trade-report intake (ADR-0015) — not a real
-  # regulator endpoint. Returns 500/timeout/duplicate/success at random so
-  # Reporting.Worker's retry/idempotency logic has genuine flakiness to
-  # exercise, not just an assertion that it would work.
+  # Custom image with delayed-message-exchange plugin for the credit-approval
+  # saga timeout (ADR-0017).
+  rabbitmq:
+    build:
+      context: .
+      dockerfile: docker/rabbitmq/Dockerfile
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 10
+
+  # Stand-in for ACER's trade-report intake (ADR-0015).
   acer-stub:
     build:
       context: .
@@ -27,21 +39,47 @@ services:
     ports:
       - "5299:8080"
 
-  # Custom image, not the stock rabbitmq:*-management — this one has the
-  # delayed-message-exchange plugin enabled, which the credit-approval
-  # saga's timeout needs on this transport (ADR-0017).
-  rabbitmq:
+  api:
     build:
       context: .
-      dockerfile: docker/rabbitmq/Dockerfile
+      dockerfile: src/Seamline.Api/Dockerfile
     ports:
-      - "5672:5672"    # AMQP
-      - "15672:15672"  # management UI (guest/guest)
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 5s
-      timeout: 30s
-      retries: 10
+      - "5000:8080"
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Database=seamline;Username=seamline_app;Password=seamline_app"
+      ConnectionStrings__PostgresMigrator: "Host=postgres;Database=seamline;Username=seamline;Password=seamline"
+      MessageBroker__Transport: RabbitMq
+      MessageBroker__RabbitMq__Host: rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  valuation-worker:
+    build:
+      context: .
+      dockerfile: src/Seamline.Valuation.Worker/Dockerfile
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Database=seamline;Username=seamline_app;Password=seamline_app"
+      ConnectionStrings__PostgresMigrator: "Host=postgres;Database=seamline;Username=seamline;Password=seamline"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  reporting-worker:
+    build:
+      context: .
+      dockerfile: src/Seamline.Reporting.Worker/Dockerfile
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Database=seamline;Username=seamline_app;Password=seamline_app"
+      ConnectionStrings__PostgresMigrator: "Host=postgres;Database=seamline;Username=seamline;Password=seamline"
+      AcerStub__BaseUrl: "http://acer-stub:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      acer-stub:
+        condition: service_started
 
 volumes:
   seamline-postgres-data:

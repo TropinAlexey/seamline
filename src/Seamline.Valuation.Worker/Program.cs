@@ -3,6 +3,9 @@ using Hangfire.PostgreSql;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 using Seamline.Modules.MarketData.Internal;
 using Seamline.Modules.Reference.Internal;
 using Seamline.Modules.Risk.Internal;
@@ -10,6 +13,16 @@ using Seamline.SharedKernel;
 using Seamline.Valuation.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("seamline-valuation-worker"))
+    .WithTracing(t => t
+        .AddHttpClientInstrumentation()
+        .AddSource("Npgsql")
+        .AddOtlpExporter())
+    .WithMetrics(m => m
+        .AddHttpClientInstrumentation()
+        .AddOtlpExporter());
 
 builder.Services.AddScoped<TenantContext>();
 builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());

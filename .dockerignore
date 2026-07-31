@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.git/
+**/TestResults/
+tests/
+docs/
+docker/
+.github/
+.claude/
+.remember/
+*.md
+*.sln.DotSettings*

@@ -3,11 +3,24 @@ using Hangfire.PostgreSql;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 using Seamline.Modules.Trading.Internal;
 using Seamline.Reporting.Worker;
 using Seamline.SharedKernel;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("seamline-reporting-worker"))
+    .WithTracing(t => t
+        .AddHttpClientInstrumentation()
+        .AddSource("Npgsql")
+        .AddOtlpExporter())
+    .WithMetrics(m => m
+        .AddHttpClientInstrumentation()
+        .AddOtlpExporter());
 
 builder.Services.AddScoped<TenantContext>();
 builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());

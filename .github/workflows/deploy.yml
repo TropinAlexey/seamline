@@ -61,5 +61,6 @@ jobs:
           docker push $REGISTRY/${{ matrix.service }}:$IMAGE_TAG
           docker push $REGISTRY/${{ matrix.service }}:latest
 
-      - name: Deploy to ECS
-        run: aws ecs update-service --cluster $ECS_CLUSTER --service ${{ matrix.ecs_service }} --force-new-deployment --no-cli-pager
+      # ponytail: ECS deploy disabled until infra is provisioned via terraform
+      # - name: Deploy to ECS
+      #   run: aws ecs update-service --cluster $ECS_CLUSTER --service ${{ matrix.ecs_service }} --force-new-deployment --no-cli-pager

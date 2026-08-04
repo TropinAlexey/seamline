@@ -46,7 +46,7 @@ graph TB
         MKT["MarketData\nforward curves"]
         STL["Settlement\ninvoices"]
         AUD["Audit\nappend-only event log"]
-        IDN["Identity\nJWT auth, FO/MO/BO roles"]
+        IDN["Identity\nJWT auth, Front/Middle/Back Office"]
     end
 
     subgraph workers["Separate processes, same database"]
@@ -160,7 +160,7 @@ give the retry/idempotency logic something genuinely flaky to run against.
 - Auth ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)): JWT signing
   key lives in `appsettings.json` as a static dev-only secret, not a real
   secrets store — fine for a local/demo project, explicitly not a
-  production posture. Three demo users (one per FO/MO/BO role) are seeded
+  production posture. Three demo users (one per Front Office/Middle Office/Back Office role) are seeded
   by the `Identity` module's `InitialCreate` migration with a documented
   password (`Demo-Password-123!`) for a fixed demo tenant
   (`11111111-1111-1111-1111-111111111111`).
@@ -181,7 +181,7 @@ give the retry/idempotency logic something genuinely flaky to run against.
 | [0010](docs/adr/0010-audit-module-placement.md) | Audit module placement: a pure sink, never publishes |
 | [0011](docs/adr/0011-trade-lifecycle-extension.md) | Trade lifecycle: `Cancelled`/`Amended`/`Delivered` |
 | [0012](docs/adr/0012-marketdata-settlement-first-entities.md) | MarketData and Settlement's first entities |
-| [0013](docs/adr/0013-identity-custom-jwt-auth.md) | Identity: custom JWT auth, FO/MO/BO roles |
+| [0013](docs/adr/0013-identity-custom-jwt-auth.md) | Identity: custom JWT auth, Front/Middle/Back Office roles |
 | [0014](docs/adr/0014-valuation-worker.md) | Valuation.Worker: real mark-to-market |
 | [0015](docs/adr/0015-reporting-worker.md) | Reporting.Worker: simplified REMIT submission |
 | [0016](docs/adr/0016-stress-scenarios.md) | Stress scenarios instead of VaR: flat and single-commodity shocks |
@@ -253,7 +253,9 @@ CI builds and pushes five Docker images to ECR on every merge to `main`.
   through Contracts and MassTransit.
 - Credit-limit saga ([ADR-0008](docs/adr/0008-saga-placement-and-ownership.md)):
   within-limit trades activate immediately; a breach parks the trade for
-  MO-role approval, with timeout and compensating release.
+  MO-role approval, with timeout and compensating release. Risk owns the
+  credit decision (reservations, exposure), not the trade lifecycle — the
+  saga lives in Trading because its terminal states are trade states.
 - Full trade lifecycle ([ADR-0011](docs/adr/0011-trade-lifecycle-extension.md)):
   `Draft → Submitted → Active | CreditPending → Active | Rejected`, plus
   `Cancelled`, `Amended`, `Delivered`.
@@ -263,7 +265,8 @@ CI builds and pushes five Docker images to ECR on every merge to `main`.
 - Multi-tenancy ([ADR-0005](docs/adr/0005-multi-tenancy.md)): EF Core query
   filter + PostgreSQL Row-Level Security.
 - JWT authentication ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)):
-  FO/MO/BO roles gate trade booking, credit approval, and invoice reads.
+  Front Office/Middle Office/Back Office roles gate trade booking, credit
+  approval, and invoice reads.
 - MarketData and Settlement first entities
   ([ADR-0012](docs/adr/0012-marketdata-settlement-first-entities.md)).
 

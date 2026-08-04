@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Seamline.Reporting.Worker": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

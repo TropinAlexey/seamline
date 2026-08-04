@@ -16,7 +16,7 @@ RUN dotnet restore src/Seamline.Valuation.Worker/Seamline.Valuation.Worker.cspro
 COPY src/ src/
 RUN dotnet publish src/Seamline.Valuation.Worker/Seamline.Valuation.Worker.csproj -c Release -o /app --no-restore
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
 ENTRYPOINT ["dotnet", "Seamline.Valuation.Worker.dll"]

@@ -10,7 +10,11 @@ using Seamline.Modules.Trading.Internal;
 using Seamline.Reporting.Worker;
 using Seamline.SharedKernel;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory
+});
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("seamline-reporting-worker"))

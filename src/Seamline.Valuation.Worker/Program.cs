@@ -12,7 +12,11 @@ using Seamline.Modules.Risk.Internal;
 using Seamline.SharedKernel;
 using Seamline.Valuation.Worker;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory
+});
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("seamline-valuation-worker"))
@@ -64,9 +68,10 @@ await host.Services.MigrateMarketDataModuleAsync();
 // curve-import runs an hour ahead of eod-valuation (ADR-0018) — separate
 // Hangfire recurring jobs instead of one combined job, since two
 // same-time Cron.Daily entries have no guaranteed relative order.
-host.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<CurveImportJob>(
+var jobManager = host.Services.GetRequiredService<IRecurringJobManager>();
+jobManager.AddOrUpdate<CurveImportJob>(
     "curve-import", job => job.RunAsync(CancellationToken.None), Cron.Daily(5));
-host.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<ValuationJob>(
+jobManager.AddOrUpdate<ValuationJob>(
     "eod-valuation", job => job.RunAsync(CancellationToken.None), Cron.Daily(6));
 
 await host.RunAsync();

@@ -4,11 +4,16 @@
 mini SaaS CTRM demo project
 
 [![CI](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml)
+[![Deploy](https://github.com/TropinAlexey/seamline/actions/workflows/deploy.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/deploy.yml)
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17.5-336791?logo=postgresql&logoColor=white)
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-FF6600?logo=rabbitmq&logoColor=white)
 ![MassTransit](https://img.shields.io/badge/MassTransit-8.5.10-2C2C2C)
+![Hangfire](https://img.shields.io/badge/Hangfire-1.8-5E3F71)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-ECS%20%7C%20RDS%20%7C%20ECR-FF9900?logo=amazonwebservices&logoColor=white)
+![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-3B348B?logo=opentelemetry&logoColor=white)
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
 forwards, in .NET 10 — a modular monolith with boundaries enforced in CI, and

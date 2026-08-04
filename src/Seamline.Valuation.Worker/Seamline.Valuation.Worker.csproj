@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <PackageReference Include="Hangfire.NetCore" Version="1.8.24" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" /> <!-- CVE-2024-21907: override Hangfire transitive 11.0.1 -->
     <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />

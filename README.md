@@ -23,8 +23,7 @@ two services extracted on purpose.
 ## Why this domain
 
 Commodity trading gives every architectural decision here a real reason to
-exist instead of a contrived one: trades are versioned because a regulator
-(a certain group of people with a keen interest) requires reporting a trade
+exist instead of a contrived one: trades are versioned because a regulator requires reporting a trade
 as it stood at the moment of reporting, not as it stands now; a worker is
 extracted for mark-to-market because revaluing a whole book on a curve
 update is a genuinely different load profile from an HTTP request; a saga
@@ -50,7 +49,7 @@ Modules/
   Audit/        cross-module actor/action/timestamp/context log
 
 PostgreSQL, one schema per module
-Multi-tenant: shared schema + tenant_id global filter, JWT-carried tenant claim
+Multi-tenant: shared schema + tenant_id global filter , JWT-carried tenant claim
 MassTransit (RabbitMQ transport; in-memory for tests — ADR-0017)
 Hangfire (Valuation.Worker's and Reporting.Worker's EOD schedulers, Phase 2)
 ```
@@ -168,12 +167,18 @@ More ADRs land as decisions are made — see `CLAUDE.md`.
 ## Running locally
 
 ```bash
-docker compose up -d          # PostgreSQL + acer-stub + RabbitMQ
+# Full stack (all 6 services):
+docker compose up -d
+
+# Or individual processes against a local Postgres + RabbitMQ:
+docker compose up -d postgres rabbitmq acer-stub
+dotnet run --project src/Seamline.Api                # migrates every module's schema on startup
+dotnet run --project src/Seamline.Valuation.Worker    # optional — EOD MtM + curve import
+dotnet run --project src/Seamline.Reporting.Worker    # optional — EOD REMIT batch
+
+# Build and test:
 dotnet build SeamlineCtrm.sln
 dotnet test SeamlineCtrm.sln
-dotnet run --project src/Seamline.Api                # API — migrates every module's schema on startup
-dotnet run --project src/Seamline.Valuation.Worker    # optional — EOD MtM + curve import, same database
-dotnet run --project src/Seamline.Reporting.Worker    # optional — EOD REMIT batch, same database
 ```
 
 Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) uses a synthetic
@@ -188,95 +193,77 @@ Platform token) or `MarketData:CurveImport:Sources:GAS=Eia` (with
 for the MO/BO demo users) returns a JWT — every other endpoint requires
 `Authorization: Bearer <token>`. See [ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md).
 
+## Deploy
+
+Infrastructure is defined in `infra/` (Terraform): VPC, RDS PostgreSQL 17.5,
+ECS Fargate (5 services), ALB, ECR, Secrets Manager, GitHub OIDC provider.
+CI builds and pushes all five Docker images to ECR on every push to `main`
+via GitHub Actions OIDC — no long-lived AWS keys. ECS deployment is
+disabled until infrastructure is provisioned.
+
+All three processes emit OpenTelemetry traces and metrics (ASP.NET Core,
+HTTP client, Npgsql, MassTransit) to any OTLP-compatible collector. The API
+exposes `/health` (Postgres + MassTransit bus checks) for ALB health probes.
+
+Multi-stage Dockerfiles keep images lean: `aspnet:10.0` for the API,
+`runtime:10.0` for workers. A full `docker compose up` starts all six
+services locally (Postgres, RabbitMQ, acer-stub, api, valuation-worker,
+reporting-worker).
+
 ## Status
 
-**Phase 1 complete.** Landed:
+**Phases 1–3 complete.**
 
-- Module boundaries + the six architecture rules above, enforced by 42 tests
-  running in CI, plus a coverage gate on `Trade`/`TradeHistory`.
-- A working vertical slice across every module: book a trade, submit it,
-  see the derived position — Reference → Trading → Risk, talking only
-  through Contracts and MassTransit, never a direct reference.
-- The credit-limit saga ([ADR-0008](docs/adr/0008-saga-placement-and-ownership.md)):
-  within-limit trades activate immediately; a breach parks the trade pending
-  an MO-role approval, with a timeout and a compensating release if nobody
-  responds.
-- The full trade lifecycle ([ADR-0011](docs/adr/0011-trade-lifecycle-extension.md)):
+172 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
+10 MarketData unit + 42 architecture + 20 integration), all green.
+18 ADRs documenting every architectural decision as it was made.
+CI builds and pushes five Docker images to ECR on every merge to `main`.
+
+### Phase 1 — skeleton and discipline
+
+- Module boundaries: the six architecture rules above, enforced by 42 tests
+  in CI, plus a coverage gate on `Trade`/`TradeHistory`.
+- A working vertical slice: Reference → Trading → Risk, talking only
+  through Contracts and MassTransit.
+- Credit-limit saga ([ADR-0008](docs/adr/0008-saga-placement-and-ownership.md)):
+  within-limit trades activate immediately; a breach parks the trade for
+  MO-role approval, with timeout and compensating release.
+- Full trade lifecycle ([ADR-0011](docs/adr/0011-trade-lifecycle-extension.md)):
   `Draft → Submitted → Active | CreditPending → Active | Rejected`, plus
   `Cancelled`, `Amended`, `Delivered`.
 - Append-only trade history ([ADR-0006](docs/adr/0006-audit-trail-instead-of-event-sourcing.md))
-  and a cross-module audit log ([ADR-0010](docs/adr/0010-audit-module-placement.md)),
-  both immutability-guaranteed by PostgreSQL itself: the app connects as a
-  restricted role with `SELECT`/`INSERT` only on these tables — migrations
-  run as a separate, more privileged role.
-- Multi-tenancy, two layers ([ADR-0005](docs/adr/0005-multi-tenancy.md)): an
-  EF Core query filter, plus PostgreSQL Row-Level Security keyed on a
-  session variable a connection interceptor sets on every connection open.
-- Real JWT authentication ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)):
-  three roles (FO/MO/BO) gate trade booking, credit approval, and invoice
-  reads respectively — no more unverified `X-Tenant-Id`/`X-Actor-Role`
-  headers.
-- MarketData and Settlement's first entities ([ADR-0012](docs/adr/0012-marketdata-settlement-first-entities.md)):
-  published curve points and delivery-triggered invoices.
-- 169 tests: unit (Trading, Risk, Identity, MarketData), architecture, and
-  integration (Testcontainers + `WebApplicationFactory`).
+  and cross-module audit log ([ADR-0010](docs/adr/0010-audit-module-placement.md)),
+  immutability-guaranteed by PostgreSQL role grants (`SELECT`/`INSERT` only).
+- Multi-tenancy ([ADR-0005](docs/adr/0005-multi-tenancy.md)): EF Core query
+  filter + PostgreSQL Row-Level Security.
+- JWT authentication ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)):
+  FO/MO/BO roles gate trade booking, credit approval, and invoice reads.
+- MarketData and Settlement first entities
+  ([ADR-0012](docs/adr/0012-marketdata-settlement-first-entities.md)).
 
-**Phase 2 well underway.** Both processes ADR-0001 promised are now built,
-plus stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)) —
-CLAUDE.md's "No VaR. Stress scenarios instead" is now true in code:
+### Phase 2 — async processes
 
-- `Valuation.Worker` ([ADR-0002](docs/adr/0002-service-extraction-criteria.md),
-  [ADR-0014](docs/adr/0014-valuation-worker.md)) — end-of-day mark-to-market
-  `(forward_price − trade_price) × volume` on a Hangfire recurring job,
-  against a volume-weighted cost basis `Position` now tracks.
+- `Valuation.Worker` ([ADR-0014](docs/adr/0014-valuation-worker.md)) —
+  end-of-day MtM on a Hangfire recurring job, volume-weighted cost basis.
 - `Reporting.Worker` ([ADR-0015](docs/adr/0015-reporting-worker.md)) —
-  end-of-day simplified REMIT submission, scanning `trade_history` (never
-  live `trade` state, per [ADR-0006](docs/adr/0006-audit-trail-instead-of-event-sourcing.md)'s
-  point-in-time requirement) for `New`/`Modify`/`Terminate` reports, sent
-  to `Seamline.AcerStub` through an `IHttpClientFactory` client with
-  `Microsoft.Extensions.Http.Resilience`'s standard retry/timeout/
-  circuit-breaker handler. Idempotency is presence-of-row, not a status
-  column — an unreported `trade_history` version is retried automatically
-  by the next run's `LEFT JOIN`.
-- Stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)) —
-  a flat ±10% shock and a sharper ±25% single-commodity shock, computed
-  inside the same EOD pass as real valuation (no extra queries, riding on
-  the `Position`/curve price the run already fetched) and persisted to
-  `stress_scenario_result`, same append-only/RLS shape as
-  `valuation_snapshot`. Built test-first: the shared `MtmCalculator` and
-  `StressScenarioResult.Create` were driven out by unit tests before the
-  runner was extended to call them.
-- Also written up: [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md)
-  (Hangfire vs MassTransit `Schedule<>`) and
-  [ADR-0004](docs/adr/0004-transactional-outbox.md) (transactional
-  outbox) — both document decisions already implemented in earlier
-  sessions, closed retroactively per CLAUDE.md's own exception for exactly
-  this kind of debt.
-- RabbitMQ transport ([ADR-0017](docs/adr/0017-rabbitmq-transport.md)) — a
-  purpose-built image (`docker/rabbitmq/Dockerfile`) with the
-  delayed-message-exchange plugin the credit-approval saga's timeout needs;
-  `Seamline.Api` picks the transport via `MessageBroker:Transport`,
-  defaulting to RabbitMQ, with integration tests pinned to the in-memory
-  transport so they stay fast. Publishers and consumers didn't change — the
-  "transport swap is config, not a rewrite" prediction from ADR-0009 held.
-- A MassTransit test harness for `TradeApprovalStateMachine` — the saga's
-  approve/deny/cancel transitions and its fault-on-missing-instance
-  correlation, exercised in-process via `AddMassTransitTestHarness`, no
-  HTTP/Postgres/broker round trip.
-- Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) — `Valuation.Worker`
-  refreshes `PriceCurvePoint` automatically on a `Cron.Daily(5)` recurring
-  job, an hour ahead of EOD valuation. `ICurveSource` is config-driven per
-  commodity: a deterministic `SyntheticCurveSource` by default (no API
-  keys, `docker compose up` still works out of the box), or real day-ahead
-  spot data — ENTSO-E Transparency Platform for POWER, the EIA Open Data
-  API's Henry Hub series for GAS (US data standing in for a
-  European-framed gas commodity, a documented mismatch, not a hidden one)
-  — both the only genuinely free/open sources found; neither publishes a
-  real multi-month forward curve, so each month's flat price is the
-  average of that commodity's daily spot price across the month's elapsed
-  days. Only refreshes a `(tenant, commodity)` pair that has already been
-  published at least once — it keeps existing curve points fresh, it
-  doesn't invent new ones.
+  simplified REMIT submission from `trade_history`, idempotent by
+  presence-of-row, retry/circuit-breaker via
+  `Microsoft.Extensions.Http.Resilience`.
+- Stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)) — flat
+  ±10% and single-commodity ±25% shocks, computed inside the same EOD pass.
+- RabbitMQ transport ([ADR-0017](docs/adr/0017-rabbitmq-transport.md)) —
+  config-driven swap from in-memory; publishers/consumers unchanged.
+- Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) — real free
+  day-ahead sources (ENTSO-E for POWER, EIA for GAS), synthetic default.
+- MtM-based credit exposure — `CreditReservationService` computes exposure
+  from current curve prices via `ICurvePointDirectory`, falling back to
+  notional when no curve exists.
 
-Still open for Phase 2: deadline sweeps and a Hangfire dashboard behind
-auth.
+### Phase 3 — deploy
+
+- Multi-stage Dockerfiles, `docker-compose.yml` (6 services).
+- Terraform infrastructure (`infra/`): VPC, RDS, ECS Fargate, ALB, ECR,
+  Secrets Manager, GitHub OIDC provider.
+- GitHub Actions CI/CD: OIDC auth → matrix docker build → push to ECR.
+  ECS deployment step ready, disabled until infra is provisioned.
+- OpenTelemetry tracing/metrics + health checks.

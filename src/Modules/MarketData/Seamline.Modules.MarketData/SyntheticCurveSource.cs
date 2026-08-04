@@ -21,10 +21,22 @@ internal sealed class SyntheticCurveSource : ICurveSource
     {
         var basePrice = BasePrices.GetValueOrDefault(commodityCode, 50m);
 
-        var seed = HashCode.Combine(commodityCode, month.Year, month.Month);
+        // ponytail: deterministic hash — HashCode.Combine is randomised per process
+        var seed = StringHash(commodityCode) ^ (month.Year * 397) ^ month.Month;
         var variationPercent = new Random(seed).Next(-10, 11) / 100m;
 
         var price = Math.Round(basePrice * (1 + variationPercent), 2, MidpointRounding.ToEven);
         return Task.FromResult<decimal?>(price);
+    }
+
+    private static int StringHash(string s)
+    {
+        unchecked
+        {
+            int hash = 5381;
+            foreach (var c in s)
+                hash = (hash << 5) + hash + c;
+            return hash;
+        }
     }
 }

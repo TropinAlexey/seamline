@@ -60,3 +60,10 @@ that depends on which field is being touched.
 Rejected. Implicit rounding via storage truncation hides *where* a value was
 rounded, which matters when a P&L number has to be explained after the fact.
 An explicit rounding call in code is one grep away from the answer.
+
+## Revisit criteria
+
+- If a hot computational path emerges (e.g., intraday portfolio-level VaR
+  on thousands of positions), benchmark `decimal` vs `double` on that path
+  specifically before switching — the type change would ripple across every
+  entity and calculator.

@@ -96,6 +96,20 @@ for visibility/testing, not because another module reads it.
   for now since `Deliver` is a single manual endpoint call, not a path with
   retries.
 
+## Alternatives considered
+
+**Store full curve history (time-series of price snapshots).** Rejected.
+Forward curve history is a significant infrastructure investment (storage,
+versioning, replay logic) without a consumer — `Valuation.Worker` needs
+today's curve, not yesterday's. `PriceCurvePoint` is an upsert-in-place
+design; `ValuationSnapshot` (ADR-0014) captures the price at valuation
+time, providing the audit trail that matters.
+
+**Invoice with a full lifecycle from day one (Draft/Issued/Paid).**
+Rejected per CLAUDE.md's "no half-finished implementations." A status enum
+with no code that transitions it is dead weight. The lifecycle will be
+designed when Settlement has a real payment consumer to drive it.
+
 ## Revisit criteria
 
 - **When `Valuation.Worker` is built** (Phase 2): decide whether `MarkPrice`

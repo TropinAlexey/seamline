@@ -2,7 +2,6 @@
 
 **Status:** Accepted
 **Date:** 2026-07
-**Deciders:** Alexey Tropin
 
 ## Context
 
@@ -108,6 +107,21 @@ today.
 - **`Deliver` has no automatic trigger.** Nothing checks `DeliveryPeriod`
   against the current date; it's a manual endpoint call until Phase 2's EOD
   sweep exists.
+
+## Alternatives considered
+
+**Full saga for every lifecycle transition (Cancel, Amend, Deliver).**
+Rejected. Cancel already routes through the existing approval saga when the
+trade is in `CreditPending`; Amend is a same-aggregate mutation with no
+external coordination; Deliver is a terminal state with no compensating
+action. Adding saga orchestration to transitions that don't need external
+approval adds complexity without a corresponding safety gain.
+
+**Separate `TradeVersion` entity instead of in-place Amend.** Rejected.
+Amend changes volume/price on the same `Trade.Id` — creating a new version
+entity would force every downstream consumer (`Risk`, `Settlement`) to
+track which version is current, duplicating the problem `trade_history`
+already solves for audit.
 
 ## Revisit criteria
 

@@ -37,27 +37,48 @@ released, not invented to demonstrate a saga.
 
 ## Architecture
 
-```
-Seamline.Api              (modular monolith)
-Seamline.Valuation.Worker (separate process, same database — EOD MtM, curve import)
-Seamline.Reporting.Worker (separate process, same database — EOD REMIT batch)
-Seamline.AcerStub         (stub regulator endpoint, local dev only)
+```mermaid
+graph TB
+    subgraph "Seamline.Api — modular monolith"
+        REF["Reference<br/><small>counterparties, commodities</small>"]
+        TRD["Trading<br/><small>trade capture + lifecycle</small>"]
+        MKT["MarketData<br/><small>forward curves</small>"]
+        RSK["Risk<br/><small>positions, credit exposure</small>"]
+        STL["Settlement<br/><small>invoices</small>"]
+        IDN["Identity<br/><small>JWT auth, FO/MO/BO</small>"]
+        AUD["Audit<br/><small>append-only event log</small>"]
+    end
 
-Modules/
-  Reference/    commodities, counterparties,
-                delivery points, calendars
-  Trading/      trade capture + lifecycle
-  MarketData/   forward curves, fixings
-  Risk/         positions, MtM, credit exposure
-  Settlement/   invoices, netting, payments
-  Identity/     tenants, users, roles, JWT auth
-  Audit/        cross-module actor/action/timestamp/context log
+    subgraph "Separate processes, same database"
+        VAL["Valuation.Worker<br/><small>EOD MtM + curve import</small>"]
+        RPT["Reporting.Worker<br/><small>EOD REMIT batch</small>"]
+    end
 
-PostgreSQL, one schema per module
-Multi-tenant: shared schema + tenant_id global filter , JWT-carried tenant claim
-MassTransit (RabbitMQ transport; in-memory for tests — ADR-0017)
-Hangfire (Valuation.Worker's and Reporting.Worker's EOD schedulers, Phase 2)
+    TRD -- "TradeActivated<br/>TradeAmended" --> RSK
+    TRD -- "TradeDelivered" --> STL
+    TRD -- "TradeActivated<br/>TradeRejected" --> AUD
+    TRD -. "ICounterpartyDirectory" .-> REF
+    RSK -. "ICurvePointDirectory" .-> MKT
+
+    VAL --> RSK
+    VAL --> MKT
+    RPT --> TRD
+    RPT -- "HTTP" --> ACER["AcerStub<br/><small>stub regulator</small>"]
+
+    PG[("PostgreSQL<br/><small>one schema per module<br/>RLS + tenant_id</small>")]
+    RMQ{{"RabbitMQ"}}
+
+    TRD --> RMQ
+    RMQ --> RSK
+    RMQ --> STL
+    RMQ --> AUD
 ```
+
+**Key design points:**
+- Solid arrows = MassTransit integration events (via RabbitMQ). Dotted = in-process query interfaces (DI).
+- Module boundaries enforced by [42 architecture tests](#architecture) in CI, not by convention.
+- Multi-tenant: shared schema + `tenant_id` global filter + PostgreSQL RLS, tenant claim in JWT.
+- Hangfire schedules EOD jobs in both workers. See [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md).
 
 Each module is two projects — `Seamline.Modules.<Name>` (implementation) and
 `Seamline.Modules.<Name>.Contracts` (public surface: DTOs, query interfaces,

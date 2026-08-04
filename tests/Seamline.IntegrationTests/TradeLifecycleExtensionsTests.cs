@@ -34,6 +34,45 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
     }
 
     [Fact]
+    public async Task Rejecting_a_credit_pending_trade_moves_it_to_rejected_and_never_creates_a_position()
+    {
+        var tenantId = Guid.NewGuid();
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+
+        var counterparty = await CreateCounterpartyAsync(client, "Small Cap Co", 1_000m);
+        var trade = await CreateTradeAsync(client, "POWER", "2027-05", "Buy", 1_000m, 50m, counterparty.Id);
+
+        var submitResponse = await client.PostAsync($"/trades/{trade.Id}/submit", content: null);
+        var submitResult = await submitResponse.Content.ReadFromJsonAsync<SubmitResultDto>();
+        Assert.Equal("CreditPending", submitResult!.State);
+
+        var riskClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
+        var rejectResponse = await riskClient.PostAsync($"/trades/{trade.Id}/reject", content: null);
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, rejectResponse.StatusCode);
+
+        var rejected = await PollForTradeStateAsync(client, trade.Id, "Rejected");
+        Assert.Equal("Rejected", rejected.State);
+
+        var positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+        Assert.Empty(positions!);
+    }
+
+    [Fact]
+    public async Task Cancelling_a_draft_trade_succeeds_inline_without_the_saga()
+    {
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);
+
+        var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
+        var trade = await CreateTradeAsync(client, "GAS", "2027-05", "Sell", 200m, 30m, counterparty.Id);
+
+        var cancelResponse = await client.PostAsync($"/trades/{trade.Id}/cancel", content: null);
+        cancelResponse.EnsureSuccessStatusCode();
+
+        var cancelled = await client.GetFromJsonAsync<TradeStateDto>($"/trades/{trade.Id}");
+        Assert.Equal("Cancelled", cancelled!.State);
+    }
+
+    [Fact]
     public async Task Amending_an_active_trade_adjusts_the_position_by_the_delta()
     {
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);

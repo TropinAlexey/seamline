@@ -39,33 +39,33 @@ released, not invented to demonstrate a saga.
 
 ```mermaid
 graph TB
-    subgraph "Seamline.Api — modular monolith"
-        REF["Reference<br/><small>counterparties, commodities</small>"]
-        TRD["Trading<br/><small>trade capture + lifecycle</small>"]
-        MKT["MarketData<br/><small>forward curves</small>"]
-        RSK["Risk<br/><small>positions, credit exposure</small>"]
-        STL["Settlement<br/><small>invoices</small>"]
-        IDN["Identity<br/><small>JWT auth, FO/MO/BO</small>"]
-        AUD["Audit<br/><small>append-only event log</small>"]
+    subgraph api["Seamline.Api — modular monolith"]
+        TRD["Trading\ntrade capture + lifecycle"]
+        REF["Reference\ncounterparties, commodities"]
+        RSK["Risk\npositions, credit exposure"]
+        MKT["MarketData\nforward curves"]
+        STL["Settlement\ninvoices"]
+        AUD["Audit\nappend-only event log"]
+        IDN["Identity\nJWT auth, FO/MO/BO roles"]
     end
 
-    subgraph "Separate processes, same database"
-        VAL["Valuation.Worker<br/><small>EOD MtM + curve import</small>"]
-        RPT["Reporting.Worker<br/><small>EOD REMIT batch</small>"]
+    subgraph workers["Separate processes, same database"]
+        VAL["Valuation.Worker\nEOD MtM + curve import"]
+        RPT["Reporting.Worker\nEOD REMIT batch"]
     end
 
-    TRD -- "TradeActivated<br/>TradeAmended" --> RSK
+    TRD -- "TradeActivated\nTradeAmended" --> RSK
     TRD -- "TradeDelivered" --> STL
-    TRD -- "TradeActivated<br/>TradeRejected" --> AUD
+    TRD -- "TradeActivated\nTradeRejected" --> AUD
     TRD -. "ICounterpartyDirectory" .-> REF
     RSK -. "ICurvePointDirectory" .-> MKT
 
     VAL --> RSK
     VAL --> MKT
     RPT --> TRD
-    RPT -- "HTTP" --> ACER["AcerStub<br/><small>stub regulator</small>"]
+    RPT -- "HTTP" --> ACER["AcerStub\nstub regulator"]
 
-    PG[("PostgreSQL<br/><small>one schema per module<br/>RLS + tenant_id</small>")]
+    PG[("PostgreSQL\nschema per module\nRLS + tenant_id")]
     RMQ{{"RabbitMQ"}}
 
     TRD --> RMQ

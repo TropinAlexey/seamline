@@ -50,7 +50,8 @@ builder.Services.AddScoped<CurveImportJob>();
 // first run, the same way EF migrations do for every module.
 builder.Services.AddHangfire(config => config
     .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(
-        builder.Configuration.GetConnectionString("PostgresMigrator"))));
+        builder.Configuration.GetConnectionString("PostgresMigrator")),
+        new PostgreSqlStorageOptions { SchemaName = "hangfire_valuation" }));
 builder.Services.AddHangfireServer();
 
 var host = builder.Build();

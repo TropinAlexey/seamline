@@ -57,11 +57,19 @@ disappeared — Hangfire.
   `Schedule<>` never has to pretend to be a cron scheduler, Hangfire never
   has to pretend to understand saga correlation.
 
+- Each worker uses its own Hangfire schema (`hangfire_valuation`,
+  `hangfire_reporting`) via `PostgreSqlStorageOptions.SchemaName`. Hangfire's
+  `RecurringJobScheduler` deserializes *all* recurring jobs from shared
+  storage on every cycle — without schema isolation, `Valuation.Worker`
+  crashes on `Seamline.Reporting.Worker` assembly not being loaded (and vice
+  versa), blocking *all* job execution. Per-worker schemas eliminate the
+  cross-deserialization entirely.
+
 ### Negative
 
 - Two scheduling mechanisms still exist in the codebase, with two different
   storage models (`Schedule<>`'s token lives in the saga's own outbox;
-  Hangfire owns its own `hangfire` schema in the same database) and two
+  Hangfire owns its own schema per worker in the same database) and two
   different places to look when something didn't run. Accepted — the
   alternative (forcing one mechanism to cover both shapes) was rejected
   below for a concrete reason, not merged away for the sake of having one.

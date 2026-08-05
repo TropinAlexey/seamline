@@ -78,7 +78,9 @@ graph TB
 - Solid arrows = MassTransit integration events (via RabbitMQ). Dotted = in-process query interfaces (DI).
 - Module boundaries enforced by [42 architecture tests](#architecture) in CI, not by convention.
 - Multi-tenant: shared schema + `tenant_id` global filter + PostgreSQL RLS, tenant claim in JWT.
-- Hangfire schedules EOD jobs in both workers. See [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md).
+- Hangfire schedules EOD jobs in both workers, each with its own PostgreSQL
+  schema (`hangfire_valuation`, `hangfire_reporting`) so the scheduler never
+  deserializes the other worker's job types. See [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md).
 
 Each module is two projects — `Seamline.Modules.<Name>` (implementation) and
 `Seamline.Modules.<Name>.Contracts` (public surface: DTOs, query interfaces,
@@ -231,17 +233,17 @@ All three processes emit OpenTelemetry traces and metrics (ASP.NET Core,
 HTTP client, Npgsql, MassTransit) to any OTLP-compatible collector. The API
 exposes `/health` (Postgres + MassTransit bus checks) for ALB health probes.
 
-Multi-stage Dockerfiles keep images lean: `aspnet:10.0` for the API,
-`runtime:10.0` for workers. A full `docker compose up` starts all six
-services locally (Postgres, RabbitMQ, acer-stub, api, valuation-worker,
-reporting-worker).
+Multi-stage Dockerfiles keep images lean: `aspnet:10.0` for the API and
+both workers (modules transitively reference `Microsoft.AspNetCore.App`).
+A full `docker compose up` starts all six services locally (Postgres,
+RabbitMQ, acer-stub, api, valuation-worker, reporting-worker).
 
 ## Status
 
 **Phases 1–3 complete.**
 
-172 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
-10 MarketData unit + 42 architecture + 20 integration), all green.
+176 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
+10 MarketData unit + 42 architecture + 24 integration), all green.
 18 ADRs documenting every architectural decision as it was made.
 CI builds and pushes five Docker images to ECR on every merge to `main`.
 

@@ -238,8 +238,13 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
 
 ## Deploy
 
-Infrastructure is defined in `infra/aws/` (Terraform): VPC, RDS PostgreSQL 17.5,
-ECS Fargate (5 services), ALB, ECR, Secrets Manager, GitHub OIDC provider.
+Infrastructure is defined twice, side by side:
+
+- **`infra/aws/`** (Terraform): VPC, RDS PostgreSQL 17.5, ECS Fargate
+  (5 services), ALB, ECR, Secrets Manager, GitHub OIDC provider.
+- **`infra/azure/`** (Bicep): PostgreSQL Flexible Server, Container Apps,
+  ACR, Key Vault, Service Bus, Log Analytics, Entra federated credential.
+
 CI builds and pushes all five Docker images to ECR on every push to `main`
 via GitHub Actions OIDC — no long-lived AWS keys. ECS deployment is
 disabled until infrastructure is provisioned.
@@ -255,7 +260,7 @@ RabbitMQ, acer-stub, api, valuation-worker, reporting-worker).
 
 ## Status
 
-**Phases 1–4 complete. Phase 5 (Azure portability lane) in progress.**
+**Phases 1–4 complete. Phase 5 (Azure portability lane) nearly complete.**
 
 191 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
 10 MarketData unit + 57 architecture + 24 integration), all green.
@@ -324,9 +329,11 @@ between AWS and Azure is one thing: the MassTransit transport branch
 compute, database, telemetry — is abstracted by the platform or identical.
 
 - **Done:** transport config seam ([ADR-0019](docs/adr/0019-cloud-portability-strategy.md)),
+  Service Bus transport wiring ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)),
   portability arch-test ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)),
-  `infra/aws/` layout for side-by-side IaC.
-- **Next:** Service Bus transport wiring ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)),
   Azure Functions Timer trigger ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)),
-  Bicep ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)),
-  pipeline ([ADR-0024](docs/adr/0024-github-actions-federation.md)).
+  Bicep IaC ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)),
+  `infra/aws/` layout for side-by-side IaC.
+- **Next:** GitHub Actions Azure job
+  ([ADR-0024](docs/adr/0024-github-actions-federation.md)),
+  README final.

@@ -68,9 +68,12 @@ jobs:
       #   run: aws ecs update-service --cluster $ECS_CLUSTER --service ${{ matrix.ecs_service }} --force-new-deployment --no-cli-pager
 
   # ── Azure: build → push to ACR, validate Bicep ────────────────
+  # ponytail: job skipped until Azure OIDC secrets are configured;
+  # secrets context unavailable in job-level `if:`, so we gate via env.
   azure-build-and-push:
-    if: ${{ secrets.AZURE_CLIENT_ID != '' }}
     runs-on: ubuntu-latest
+    env:
+      HAS_AZURE: ${{ secrets.AZURE_CLIENT_ID != '' }}
     strategy:
       matrix:
         include:
@@ -85,8 +88,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        if: env.HAS_AZURE == 'true'
 
       - name: Azure login (OIDC)
+        if: env.HAS_AZURE == 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -94,9 +99,11 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Login to ACR
+        if: env.HAS_AZURE == 'true'
         run: az acr login --name ${{ secrets.ACR_NAME }}
 
       - name: Build and push
+        if: env.HAS_AZURE == 'true'
         env:
           REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
           IMAGE_TAG: ${{ github.sha }}

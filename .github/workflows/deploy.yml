@@ -69,6 +69,7 @@ jobs:
 
   # ── Azure: build → push to ACR, validate Bicep ────────────────
   azure-build-and-push:
+    if: secrets.AZURE_CLIENT_ID != ''
     runs-on: ubuntu-latest
     strategy:
       matrix:

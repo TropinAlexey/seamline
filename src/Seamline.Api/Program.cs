@@ -90,6 +90,9 @@ builder.Services.AddMassTransit(x =>
 
     var transport = builder.Configuration["MessageBroker:Transport"];
 
+    // The message scheduler is load-bearing: the credit-limit saga (ADR-0008)
+    // uses Schedule<> for approval timeouts. Each transport provides its own
+    // delayed-delivery mechanism (ADR-0020 §2).
     if (transport == "InMemory")
     {
         x.UsingInMemory((context, cfg) =>
@@ -107,7 +110,10 @@ builder.Services.AddMassTransit(x =>
                     "MessageBroker:AzureServiceBus:ConnectionString is required " +
                     "when Transport is AzureServiceBus."));
 
-            // Service Bus has native delayed delivery (ADR-0020)
+            // Topology pre-provisioned in Bicep; runtime identity is send/listen
+            // only, no Manage claim (ADR-0020 §4).
+            cfg.DeployTopologyOnly = false;
+
             cfg.UseServiceBusMessageScheduler();
             ConfigurePipeline(cfg, context);
         });

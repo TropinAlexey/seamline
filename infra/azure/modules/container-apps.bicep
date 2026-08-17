@@ -135,5 +135,42 @@ resource reportingWorker 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+// --- Acer Stub (internal ingress, port 8080) ---
+resource acerStub 'Microsoft.App/containerApps@2024-03-01' = {
+  name: '${projectName}-acer-stub'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${workloadIdentityId}': {} }
+  }
+  properties: {
+    managedEnvironmentId: environment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: false
+        targetPort: 8080
+        transport: 'http'
+      }
+      registries: [
+        {
+          server: acrLoginServer
+          identity: workloadIdentityId
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'acer-stub'
+          image: '${acrLoginServer}/seamline-acer-stub:latest'
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        }
+      ]
+      scale: { minReplicas: 1, maxReplicas: 1 }
+    }
+  }
+}
+
 output apiFqdn string = api.properties.configuration.ingress.fqdn
 output environmentId string = environment.id

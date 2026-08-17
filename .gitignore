@@ -9,3 +9,4 @@ riderModule.iml
 TestResults/
 coverage.json
 coverage.cobertura.xml
+local.settings.json

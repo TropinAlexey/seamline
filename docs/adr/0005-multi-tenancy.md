@@ -108,6 +108,20 @@ operational isolation that would justify that cost. Shared schema with RLS
 gives most of the same safety guarantee at a fraction of the operational
 complexity.
 
+**PgBouncer (connection pooling proxy).** Considered for high-connection-count
+scalability. Rejected: PgBouncer's transaction pooling mode is incompatible
+with the RLS enforcement layer. `TenantSessionVariableInterceptor` uses `SET`
+(session-level) to bind `app.tenant_id` on every connection open; in
+transaction mode PgBouncer reassigns backend connections between transactions,
+so a session variable set by one client can leak to the next client on the
+same backend — a tenant isolation breach. Switching to `SET LOCAL`
+(transaction-scoped) would restore compatibility but requires every database
+call to run inside an explicit transaction, adding complexity across the
+codebase. Session pooling mode avoids the leak but offers negligible benefit
+over Npgsql's built-in connection pool. At Seamline's scale (three services,
+low tenant count) the Npgsql pool is sufficient, and preserving the
+defense-in-depth RLS layer is worth more than premature connection scaling.
+
 ## Revisit criteria
 
 Move toward database-per-tenant or schema-per-tenant if any of the

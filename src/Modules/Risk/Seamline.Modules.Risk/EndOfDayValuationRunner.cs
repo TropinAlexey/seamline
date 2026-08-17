@@ -92,10 +92,10 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
             .UseNpgsql(configuration.GetConnectionString("PostgresMigrator"));
 
         await using var db = new RiskDbContext(optionsBuilder.Options, new TenantContext());
-        var positions = await db.Positions.IgnoreQueryFilters()
+        return await db.Positions.IgnoreQueryFilters()
             .Where(p => p.NetVolume != 0)
+            .Select(p => p.TenantId.Value)
+            .Distinct()
             .ToListAsync(cancellationToken);
-
-        return positions.Select(p => p.TenantId.Value).Distinct().ToList();
     }
 }

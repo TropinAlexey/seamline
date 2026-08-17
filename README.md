@@ -223,7 +223,7 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
 
 ## Deploy
 
-Infrastructure is defined in `infra/` (Terraform): VPC, RDS PostgreSQL 17.5,
+Infrastructure is defined in `infra/aws/` (Terraform): VPC, RDS PostgreSQL 17.5,
 ECS Fargate (5 services), ALB, ECR, Secrets Manager, GitHub OIDC provider.
 CI builds and pushes all five Docker images to ECR on every push to `main`
 via GitHub Actions OIDC — no long-lived AWS keys. ECS deployment is
@@ -293,7 +293,7 @@ CI builds and pushes five Docker images to ECR on every merge to `main`.
 ### Phase 3 — deploy
 
 - Multi-stage Dockerfiles, `docker-compose.yml` (6 services).
-- Terraform infrastructure (`infra/`): VPC, RDS, ECS Fargate, ALB, ECR,
+- Terraform infrastructure (`infra/aws/`): VPC, RDS, ECS Fargate, ALB, ECR,
   Secrets Manager, GitHub OIDC provider.
 - GitHub Actions CI/CD: OIDC auth → matrix docker build → push to ECR.
   ECS deployment step ready, disabled until infra is provisioned.

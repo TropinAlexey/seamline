@@ -103,11 +103,11 @@ internal sealed class RemitReportingRunner(IServiceProvider services, ILogger<Re
             .UseNpgsql(configuration.GetConnectionString("PostgresMigrator"));
 
         await using var db = new TradingDbContext(optionsBuilder.Options, new TenantContext());
-        var candidates = await db.TradeHistory.IgnoreQueryFilters()
+        return await db.TradeHistory.IgnoreQueryFilters()
             .Where(h => ReportableStates.Contains(h.State))
             .Where(h => !db.RemitReports.IgnoreQueryFilters().Any(r => r.TradeId == h.TradeId && r.Version == h.Version))
+            .Select(h => h.TenantId.Value)
+            .Distinct()
             .ToListAsync(cancellationToken);
-
-        return candidates.Select(h => h.TenantId.Value).Distinct().ToList();
     }
 }

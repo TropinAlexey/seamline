@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.1.0" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Timer" Version="4.3.1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageReference Include="Npgsql.OpenTelemetry" Version="10.0.3" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\Risk\Seamline.Modules.Risk\Seamline.Modules.Risk.csproj" />
+    <ProjectReference Include="..\Modules\MarketData\Seamline.Modules.MarketData\Seamline.Modules.MarketData.csproj" />
+    <ProjectReference Include="..\Modules\Reference\Seamline.Modules.Reference\Seamline.Modules.Reference.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="host.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="local.settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <!-- WorkerExtensions inner build pulls ExtensionsMetadataGenerator which
+       loads .NET 2.2 hostpolicy — x86_64 only on macOS, fails on Apple Silicon.
+       Isolated worker resolves extensions at startup, not via legacy metadata.
+       Override the SDK property AFTER its targets import so the value sticks. -->
+  <Target Name="_DisableFunctionsInnerBuildOnArm" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_FunctionsBuildEnabled Condition="$([MSBuild]::IsOSPlatform('OSX'))">false</_FunctionsBuildEnabled>
+    </PropertyGroup>
+  </Target>
+
+</Project>

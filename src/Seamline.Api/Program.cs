@@ -100,12 +100,17 @@ builder.Services.AddMassTransit(x =>
     }
     else if (transport == "AzureServiceBus")
     {
-        // Phase B (ADR-0020): replace this with UsingAzureServiceBus +
-        // UseServiceBusMessageScheduler once MassTransit.Azure.ServiceBus.Core
-        // is added to this project.
-        throw new NotSupportedException(
-            "AzureServiceBus transport requires Phase B (ADR-0020). " +
-            "Use InMemory or RabbitMq until then.");
+        x.UsingAzureServiceBus((context, cfg) =>
+        {
+            cfg.Host(builder.Configuration["MessageBroker:AzureServiceBus:ConnectionString"]
+                ?? throw new InvalidOperationException(
+                    "MessageBroker:AzureServiceBus:ConnectionString is required " +
+                    "when Transport is AzureServiceBus."));
+
+            // Service Bus has native delayed delivery (ADR-0020)
+            cfg.UseServiceBusMessageScheduler();
+            ConfigurePipeline(cfg, context);
+        });
     }
     else
     {

@@ -31,6 +31,7 @@ builder.Services.AddMarketDataModule(builder.Configuration);
 
 var host = builder.Build();
 
+await host.Services.MigrateReferenceModuleAsync();
 await host.Services.MigrateRiskModuleAsync();
 await host.Services.MigrateMarketDataModuleAsync();
 

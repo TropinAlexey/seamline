@@ -118,7 +118,7 @@ builder.Services.AddMassTransit(x =>
             ConfigurePipeline(cfg, context);
         });
     }
-    else
+    else if (transport is null or "RabbitMQ")
     {
         x.UsingRabbitMq((context, cfg) =>
         {
@@ -135,6 +135,12 @@ builder.Services.AddMassTransit(x =>
             cfg.UseDelayedMessageScheduler();
             ConfigurePipeline(cfg, context);
         });
+    }
+    else
+    {
+        throw new InvalidOperationException(
+            $"Unknown MessageBroker:Transport '{transport}'. " +
+            "Expected: InMemory, RabbitMQ, or AzureServiceBus.");
     }
 });
 

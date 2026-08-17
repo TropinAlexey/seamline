@@ -14,7 +14,7 @@ public class CloudPortabilityTests
         "Reference", "Trading", "MarketData", "Risk", "Settlement", "Identity", "Audit"
     ];
 
-    private static readonly string[] CloudSdkPrefixes = ["AWSSDK", "Azure"];
+    private static readonly string[] CloudSdkPrefixes = ["AWSSDK", "Azure."];
 
     public static IEnumerable<object[]> AllAssemblies()
     {

@@ -7,6 +7,7 @@ on:
     paths:
       - "src/**"
       - "docker/**"
+      - "infra/**"
       - ".github/workflows/deploy.yml"
 
 permissions:
@@ -18,7 +19,8 @@ env:
   ECS_CLUSTER: seamline
 
 jobs:
-  build-and-push:
+  # ── AWS: build → push to ECR ──────────────────────────────────
+  aws-build-and-push:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -64,3 +66,62 @@ jobs:
       # ponytail: ECS deploy disabled until infra is provisioned via terraform
       # - name: Deploy to ECS
       #   run: aws ecs update-service --cluster $ECS_CLUSTER --service ${{ matrix.ecs_service }} --force-new-deployment --no-cli-pager
+
+  # ── Azure: build → push to ACR, validate Bicep ────────────────
+  azure-build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: seamline-api
+            dockerfile: src/Seamline.Api/Dockerfile
+          - service: seamline-valuation-worker
+            dockerfile: src/Seamline.Valuation.Worker/Dockerfile
+          - service: seamline-reporting-worker
+            dockerfile: src/Seamline.Reporting.Worker/Dockerfile
+          - service: seamline-acer-stub
+            dockerfile: src/Seamline.AcerStub/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Build and push
+        env:
+          REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f ${{ matrix.dockerfile }} -t $REGISTRY/${{ matrix.service }}:$IMAGE_TAG -t $REGISTRY/${{ matrix.service }}:latest .
+          docker push $REGISTRY/${{ matrix.service }}:$IMAGE_TAG
+          docker push $REGISTRY/${{ matrix.service }}:latest
+
+      # ponytail: Container Apps deploy disabled until infra is provisioned via bicep
+      # - name: Deploy to Container Apps
+      #   run: az containerapp update --name seamline-api --resource-group seamline --image $REGISTRY/${{ matrix.service }}:$IMAGE_TAG
+
+  azure-validate-bicep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate Bicep (offline)
+        run: az bicep build --file infra/azure/main.bicep
+
+      # what-if requires an authenticated subscription; enable when provisioned
+      # - name: Azure login (OIDC)
+      #   uses: azure/login@v2
+      #   with:
+      #     client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # - name: What-if
+      #   run: az deployment group what-if --resource-group seamline --template-file infra/azure/main.bicep --parameters dbOwnerPassword=placeholder dbAppPassword=placeholder

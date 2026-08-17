@@ -13,6 +13,8 @@ mini SaaS CTRM demo project
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-ECS%20%7C%20RDS%20%7C%20ECR-FF9900?logo=amazonwebservices&logoColor=white)
+![Azure](https://img.shields.io/badge/Azure-Container%20Apps%20%7C%20Service%20Bus-0078D4?logo=microsoftazure&logoColor=white)
+![Bicep](https://img.shields.io/badge/Bicep-0078D4?logo=microsoftazure&logoColor=white)
 ![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-3B348B?logo=opentelemetry&logoColor=white)
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
@@ -76,7 +78,7 @@ graph TB
 
 **Key design points:**
 - Solid arrows = MassTransit integration events (via RabbitMQ). Dotted = in-process query interfaces (DI).
-- Module boundaries enforced by [42 architecture tests](#architecture) in CI, not by convention.
+- Module boundaries enforced by [57 architecture tests](#architecture) in CI, not by convention.
 - Multi-tenant: shared schema + `tenant_id` global filter + PostgreSQL RLS, tenant claim in JWT.
 - Hangfire schedules EOD jobs in both workers, each with its own PostgreSQL
   schema (`hangfire_valuation`, `hangfire_reporting`) so the scheduler never
@@ -113,7 +115,7 @@ public void Module_implementation_must_not_depend_on_another_modules_implementat
 ```
 _(verbatim from `tests/Seamline.ArchTests/ModuleBoundaryTests.cs`)_
 
-That's one of six rules `Seamline.ArchTests` runs on every build, each
+That's one of seven rules `Seamline.ArchTests` runs on every build, each
 stated as prose somewhere in `CLAUDE.md` or an ADR and enforced here instead
 of trusted to hold:
 
@@ -125,6 +127,7 @@ of trusted to hold:
 | Money and volume fields are never `double`/`float` | `CLAUDE.md`, [ADR-0007](docs/adr/0007-decimal-rounding.md) |
 | An implementation assembly exposes nothing public beyond its DI/endpoint composition root | `CLAUDE.md` ("internal by default") |
 | No migration adds a foreign key across module schemas | `CLAUDE.md` |
+| No module or `.Contracts` assembly references `AWSSDK.*` or `Azure.*` | [ADR-0021](docs/adr/0021-portability-enforced-in-ci.md) |
 
 The last one runs each migration's `Up()` against a real `MigrationBuilder`
 and inspects the resulting operations — including foreign keys declared
@@ -190,6 +193,18 @@ give the retry/idempotency logic something genuinely flaky to run against.
 | [0017](docs/adr/0017-rabbitmq-transport.md) | RabbitMQ transport, config-driven; in-memory transport for tests |
 | [0018](docs/adr/0018-curve-import.md) | Curve import: real free day-ahead sources (ENTSO-E, EIA), synthetic default |
 
+
+ADRs 0019–0024 form the **cloud portability lane** (Phase 5, in progress):
+
+| ADR | Topic |
+|---|---|
+| [0019](docs/adr/0019-cloud-portability-strategy.md) | Cloud portability: differences live in IaC and config, never in code |
+| [0020](docs/adr/0020-azure-service-bus-transport.md) | Azure Service Bus as a config-selected MassTransit transport |
+| [0021](docs/adr/0021-portability-enforced-in-ci.md) | Portability enforced in CI: no cloud SDK in module assemblies |
+| [0022](docs/adr/0022-serverless-valuation-trigger.md) | Serverless trigger: Azure Function Timer as an alternative to Hangfire |
+| [0023](docs/adr/0023-container-apps-and-bicep.md) | Container Apps (not AKS) and Bicep alongside Terraform |
+| [0024](docs/adr/0024-github-actions-federation.md) | GitHub Actions with workload identity federation, not Azure DevOps |
+
 More ADRs land as decisions are made — see `CLAUDE.md`.
 
 ## Running locally
@@ -240,16 +255,16 @@ RabbitMQ, acer-stub, api, valuation-worker, reporting-worker).
 
 ## Status
 
-**Phases 1–3 complete.**
+**Phases 1–4 complete. Phase 5 (Azure portability lane) in progress.**
 
-176 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
-10 MarketData unit + 42 architecture + 24 integration), all green.
-18 ADRs documenting every architectural decision as it was made.
+191 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
+10 MarketData unit + 57 architecture + 24 integration), all green.
+24 ADRs documenting every architectural decision as it was made.
 CI builds and pushes five Docker images to ECR on every merge to `main`.
 
 ### Phase 1 — skeleton and discipline
 
-- Module boundaries: the six architecture rules above, enforced by 42 tests
+- Module boundaries: the seven architecture rules above, enforced by 57 tests
   in CI, plus a coverage gate on `Trade`/`TradeHistory`.
 - A working vertical slice: Reference → Trading → Risk, talking only
   through Contracts and MassTransit.
@@ -298,3 +313,20 @@ CI builds and pushes five Docker images to ECR on every merge to `main`.
 - GitHub Actions CI/CD: OIDC auth → matrix docker build → push to ECR.
   ECS deployment step ready, disabled until infra is provisioned.
 - OpenTelemetry tracing/metrics + health checks.
+
+### Phase 5 — Azure portability lane (in progress)
+
+The domain has no cloud SDK dependency — verified by an architecture test
+([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)) that fails the build
+if `AWSSDK.*` or `Azure.*` leaks into any module assembly. The code delta
+between AWS and Azure is one thing: the MassTransit transport branch
+(`InMemory` | `RabbitMq` | `AzureServiceBus`). Everything else — secrets,
+compute, database, telemetry — is abstracted by the platform or identical.
+
+- **Done:** transport config seam ([ADR-0019](docs/adr/0019-cloud-portability-strategy.md)),
+  portability arch-test ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)),
+  `infra/aws/` layout for side-by-side IaC.
+- **Next:** Service Bus transport wiring ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)),
+  Azure Functions Timer trigger ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)),
+  Bicep ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)),
+  pipeline ([ADR-0024](docs/adr/0024-github-actions-federation.md)).

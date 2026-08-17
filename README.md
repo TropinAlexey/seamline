@@ -194,7 +194,7 @@ give the retry/idempotency logic something genuinely flaky to run against.
 | [0018](docs/adr/0018-curve-import.md) | Curve import: real free day-ahead sources (ENTSO-E, EIA), synthetic default |
 
 
-ADRs 0019–0024 form the **cloud portability lane** (Phase 5, in progress):
+ADRs 0019–0024 form the **cloud portability lane** (Phase 5):
 
 | ADR | Topic |
 |---|---|
@@ -245,9 +245,11 @@ Infrastructure is defined twice, side by side:
 - **`infra/azure/`** (Bicep): PostgreSQL Flexible Server, Container Apps,
   ACR, Key Vault, Service Bus, Log Analytics, Entra federated credential.
 
-CI builds and pushes all five Docker images to ECR on every push to `main`
-via GitHub Actions OIDC — no long-lived AWS keys. ECS deployment is
-disabled until infrastructure is provisioned.
+One GitHub Actions pipeline, OIDC into both clouds, no stored credentials:
+- **AWS:** matrix docker build → push to ECR. ECS deploy defined, disabled
+  until infra is provisioned.
+- **Azure:** matrix docker build → push to ACR + offline `bicep build` gate.
+  Container Apps deploy defined, disabled until infra is provisioned.
 
 All three processes emit OpenTelemetry traces and metrics (ASP.NET Core,
 HTTP client, Npgsql, MassTransit) to any OTLP-compatible collector. The API
@@ -260,12 +262,12 @@ RabbitMQ, acer-stub, api, valuation-worker, reporting-worker).
 
 ## Status
 
-**Phases 1–4 complete. Phase 5 (Azure portability lane) nearly complete.**
+**Phases 1–5 complete.**
 
 191 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
 10 MarketData unit + 57 architecture + 24 integration), all green.
 24 ADRs documenting every architectural decision as it was made.
-CI builds and pushes five Docker images to ECR on every merge to `main`.
+One pipeline deploys to both clouds via OIDC — no stored credentials.
 
 ### Phase 1 — skeleton and discipline
 
@@ -319,7 +321,7 @@ CI builds and pushes five Docker images to ECR on every merge to `main`.
   ECS deployment step ready, disabled until infra is provisioned.
 - OpenTelemetry tracing/metrics + health checks.
 
-### Phase 5 — Azure portability lane (in progress)
+### Phase 5 — Azure portability lane
 
 The domain has no cloud SDK dependency — verified by an architecture test
 ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)) that fails the build
@@ -328,12 +330,15 @@ between AWS and Azure is one thing: the MassTransit transport branch
 (`InMemory` | `RabbitMq` | `AzureServiceBus`). Everything else — secrets,
 compute, database, telemetry — is abstracted by the platform or identical.
 
-- **Done:** transport config seam ([ADR-0019](docs/adr/0019-cloud-portability-strategy.md)),
-  Service Bus transport wiring ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)),
-  portability arch-test ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)),
-  Azure Functions Timer trigger ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)),
-  Bicep IaC ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)),
-  `infra/aws/` layout for side-by-side IaC.
-- **Next:** GitHub Actions Azure job
-  ([ADR-0024](docs/adr/0024-github-actions-federation.md)),
-  README final.
+- Transport config seam with three branches
+  ([ADR-0019](docs/adr/0019-cloud-portability-strategy.md),
+  [ADR-0020](docs/adr/0020-azure-service-bus-transport.md)).
+- Portability arch-test — `AWSSDK.*`/`Azure.*` in a module assembly fails
+  the build ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)).
+- `Seamline.Valuation.Function` — Azure Functions isolated worker, Timer
+  trigger, calling the same `RunEndOfDayValuationAsync` as the Hangfire
+  path ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)).
+- `infra/azure/` (Bicep) alongside `infra/aws/` (Terraform) — full resource
+  parity ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)).
+- One GitHub Actions pipeline, OIDC into both clouds, no stored credentials
+  ([ADR-0024](docs/adr/0024-github-actions-federation.md)).

@@ -33,6 +33,7 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(m => m
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
+        .AddMeter("Npgsql")
         .AddOtlpExporter());
 
 builder.Services.AddHealthChecks()

@@ -19,6 +19,7 @@ builder.Services.AddOpenTelemetry()
         .AddOtlpExporter())
     .WithMetrics(m => m
         .AddHttpClientInstrumentation()
+        .AddMeter("Npgsql")
         .AddOtlpExporter());
 
 builder.Services.AddScoped<TenantContext>();

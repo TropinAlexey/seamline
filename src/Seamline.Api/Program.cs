@@ -79,35 +79,33 @@ builder.Services.AddMassTransit(x =>
     x.AddAuditMassTransitConfiguration();
     x.AddSettlementMassTransitConfiguration();
 
-    // Shared by both transports (ADR-0017) — only the host/credentials setup
-    // below differs between them.
+    // Transport-agnostic pipeline (ADR-0017, ADR-0020). Message scheduler is
+    // transport-specific and configured inside each transport branch below.
     void ConfigurePipeline<TEndpoint>(IBusFactoryConfigurator<TEndpoint> cfg, IBusRegistrationContext context)
         where TEndpoint : IReceiveEndpointConfigurator
     {
-        // The credit-limit saga's approval timeout (ADR-0008) uses
-        // MassTransit's own Schedule<>, not Hangfire — Hangfire is for work
-        // that isn't tied to a specific saga instance (EOD jobs, sweeps).
-        // On RabbitMQ this needs the delayed-message-exchange plugin
-        // (docker/rabbitmq/Dockerfile).
-        cfg.UseDelayedMessageScheduler();
-
-        // Covers the outbox's polling delay: an approve/reject can arrive
-        // before the saga instance it targets has been created from the
-        // (separately outboxed) TradeApprovalRequested. Combined with
-        // OnMissingInstance(Fault()) in TradeApprovalStateMachine, that race
-        // becomes a few retried deliveries instead of a silently dropped
-        // approval.
         cfg.UseMessageRetry(r => r.Intervals(100, 250, 500, 1000, 2000));
-
         cfg.ConfigureEndpoints(context);
     }
 
-    // Tests set this to "InMemory" (SeamlineApiFactory) so every existing
-    // integration test keeps running without a real broker; local dev and
-    // everything else defaults to RabbitMQ (ADR-0017).
-    if (builder.Configuration["MessageBroker:Transport"] == "InMemory")
+    var transport = builder.Configuration["MessageBroker:Transport"];
+
+    if (transport == "InMemory")
     {
-        x.UsingInMemory((context, cfg) => ConfigurePipeline(cfg, context));
+        x.UsingInMemory((context, cfg) =>
+        {
+            cfg.UseDelayedMessageScheduler();
+            ConfigurePipeline(cfg, context);
+        });
+    }
+    else if (transport == "AzureServiceBus")
+    {
+        // Phase B (ADR-0020): replace this with UsingAzureServiceBus +
+        // UseServiceBusMessageScheduler once MassTransit.Azure.ServiceBus.Core
+        // is added to this project.
+        throw new NotSupportedException(
+            "AzureServiceBus transport requires Phase B (ADR-0020). " +
+            "Use InMemory or RabbitMq until then.");
     }
     else
     {
@@ -122,6 +120,8 @@ builder.Services.AddMassTransit(x =>
                     h.Password(builder.Configuration["MessageBroker:RabbitMq:Password"] ?? "guest");
                 });
 
+            // RabbitMQ delayed-message-exchange plugin (docker/rabbitmq/Dockerfile)
+            cfg.UseDelayedMessageScheduler();
             ConfigurePipeline(cfg, context);
         });
     }

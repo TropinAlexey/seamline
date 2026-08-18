@@ -18,8 +18,8 @@ mini SaaS CTRM demo project
 ![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-3B348B?logo=opentelemetry&logoColor=white)
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
-forwards, in .NET 10 — a modular monolith with boundaries enforced in CI, and
-two services extracted on purpose.
+forwards, in .NET 10 — a modular monolith with boundaries and cloud portability
+enforced in CI, and two services extracted on purpose.
 
 <br clear="left" />
 
@@ -127,7 +127,7 @@ of trusted to hold:
 | Money and volume fields are never `double`/`float` | `CLAUDE.md`, [ADR-0007](docs/adr/0007-decimal-rounding.md) |
 | An implementation assembly exposes nothing public beyond its DI/endpoint composition root | `CLAUDE.md` ("internal by default") |
 | No migration adds a foreign key across module schemas | `CLAUDE.md` |
-| No module or `.Contracts` assembly references `AWSSDK.*` or `Azure.*` | [ADR-0021](docs/adr/0021-portability-enforced-in-ci.md) |
+| No module or `.Contracts` assembly references `AWSSDK.*` or `Azure.*` packages | [ADR-0021](docs/adr/0021-portability-enforced-in-ci.md) |
 
 The last one runs each migration's `Up()` against a real `MigrationBuilder`
 and inspects the resulting operations — including foreign keys declared
@@ -251,9 +251,10 @@ One GitHub Actions pipeline, OIDC into both clouds, no stored credentials:
 - **Azure:** matrix docker build → push to ACR + offline `bicep build` gate.
   Container Apps deploy defined, disabled until infra is provisioned.
 
-All three processes emit OpenTelemetry traces and metrics (ASP.NET Core,
-HTTP client, Npgsql, MassTransit) to any OTLP-compatible collector. The API
-exposes `/health` (Postgres + MassTransit bus checks) for ALB health probes.
+All processes emit OpenTelemetry traces and metrics (ASP.NET Core, HTTP
+client, Npgsql connection pool, MassTransit) to any OTLP-compatible collector.
+The API exposes `/health` (Postgres + MassTransit bus checks) for load
+balancer health probes.
 
 Multi-stage Dockerfiles keep images lean: `aspnet:10.0` for the API and
 both workers (modules transitively reference `Microsoft.AspNetCore.App`).
@@ -325,7 +326,7 @@ One pipeline deploys to both clouds via OIDC — no stored credentials.
 
 The domain has no cloud SDK dependency — verified by an architecture test
 ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)) that fails the build
-if `AWSSDK.*` or `Azure.*` leaks into any module assembly. The code delta
+if any `AWSSDK.*` or `Azure.*` package leaks into a module assembly. The code delta
 between AWS and Azure is one thing: the MassTransit transport branch
 (`InMemory` | `RabbitMq` | `AzureServiceBus`). Everything else — secrets,
 compute, database, telemetry — is abstracted by the platform or identical.

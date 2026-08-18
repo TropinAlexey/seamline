@@ -1,6 +1,118 @@
-@Seamline.Api_HostAddress = http://localhost:5298
+@host = http://localhost:5298
+@tenantId = 11111111-1111-1111-1111-111111111111
 
-GET {{Seamline.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Login (trader — Front Office)
+POST {{host}}/auth/login
+Content-Type: application/json
 
-###
+{"tenantId": "{{tenantId}}", "login": "trader", "password": "Demo-Password-123!"}
+
+> {% client.global.set("token", response.body.token); %}
+
+### Login (risk — Middle Office)
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{"tenantId": "{{tenantId}}", "login": "risk", "password": "Demo-Password-123!"}
+
+> {% client.global.set("token", response.body.token); %}
+
+### Login (backoffice — Back Office)
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{"tenantId": "{{tenantId}}", "login": "backoffice", "password": "Demo-Password-123!"}
+
+> {% client.global.set("token", response.body.token); %}
+
+### Health check
+GET {{host}}/health
+
+### ── Reference ──────────────────────────────────────────────────
+
+### Create counterparty
+POST {{host}}/counterparties
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{"name": "Acme Energy GmbH", "creditLimit": 1000000}
+
+> {% client.global.set("counterpartyId", response.body.id); %}
+
+### Get counterparty
+GET {{host}}/counterparties/{{counterpartyId}}
+Authorization: Bearer {{token}}
+
+### ── Trading ────────────────────────────────────────────────────
+
+### Create trade (Draft)
+POST {{host}}/trades
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "commodityCode": "POWER",
+  "deliveryPeriod": "2026-09",
+  "direction": 0,
+  "volume": 100,
+  "price": 42.50,
+  "counterpartyId": "{{counterpartyId}}"
+}
+
+> {% client.global.set("tradeId", response.body.id); %}
+
+### Get trade
+GET {{host}}/trades/{{tradeId}}
+Authorization: Bearer {{token}}
+
+### Submit trade
+POST {{host}}/trades/{{tradeId}}/submit
+Authorization: Bearer {{token}}
+
+### Approve trade (MO role required)
+POST {{host}}/trades/{{tradeId}}/approve
+Authorization: Bearer {{token}}
+
+### Reject trade (MO role required)
+POST {{host}}/trades/{{tradeId}}/reject
+Authorization: Bearer {{token}}
+
+### Cancel trade
+POST {{host}}/trades/{{tradeId}}/cancel
+Authorization: Bearer {{token}}
+
+### Amend trade
+POST {{host}}/trades/{{tradeId}}/amend
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{"volume": 150, "price": 43.00, "reason": "Price renegotiated"}
+
+### Deliver trade
+POST {{host}}/trades/{{tradeId}}/deliver
+Authorization: Bearer {{token}}
+
+### ── Risk ───────────────────────────────────────────────────────
+
+### Get positions (with MtM and stress scenarios)
+GET {{host}}/positions
+Authorization: Bearer {{token}}
+
+### ── MarketData ─────────────────────────────────────────────────
+
+### Set curve point
+POST {{host}}/curve-points
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{"commodityCode": "POWER", "deliveryPeriod": "2026-09", "price": 44.00}
+
+### Get curve points
+GET {{host}}/curve-points
+Authorization: Bearer {{token}}
+
+### ── Settlement ─────────────────────────────────────────────────
+
+### Get invoices (BO role required)
+GET {{host}}/invoices
+Authorization: Bearer {{token}}

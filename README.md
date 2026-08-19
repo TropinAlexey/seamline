@@ -218,7 +218,7 @@ More ADRs land as decisions are made — see `CLAUDE.md`.
 ## Running locally
 
 ```bash
-# Full stack (all 6 services):
+# Full stack (all 9 services):
 docker compose up -d
 
 # Or individual processes against a local Postgres + RabbitMQ:
@@ -231,6 +231,26 @@ dotnet run --project src/Seamline.Reporting.Worker    # optional — EOD REMIT b
 dotnet build SeamlineCtrm.sln
 dotnet test SeamlineCtrm.sln
 ```
+
+Once running, these are available on localhost:
+
+| Service | URL | Notes |
+|---|---|---|
+| API | http://localhost:5000 | All endpoints (see below) |
+| Health check | http://localhost:5000/health | Postgres + MassTransit bus |
+| Grafana | http://localhost:3000 | Anonymous viewer, admin/admin |
+| Prometheus | http://localhost:9090 | Raw metrics query UI |
+| OTel Collector | http://localhost:4317 (gRPC), :4318 (HTTP) | OTLP receiver |
+| RabbitMQ Management | http://localhost:15672 | seamline / seamline |
+| PostgreSQL | localhost:5432 | seamline / seamline |
+
+Grafana ships with a pre-provisioned **Seamline Overview** dashboard
+([ADR-0025](docs/adr/0025-observability-stack.md)): HTTP request rate,
+latency p95, 5xx errors, Npgsql connection pool, MassTransit receive rate
+and consumer duration, .NET runtime (working set, GC, heap, thread pool,
+exceptions, CPU). All panels respond to the `$service` dropdown.
+
+![Grafana dashboard under load](docs/grafana-load-test.png)
 
 Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) uses a synthetic
 price source by default — no configuration needed. To opt a commodity into

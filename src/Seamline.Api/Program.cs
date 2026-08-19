@@ -1,7 +1,9 @@
 using System.Text;
+using System.Text.Json;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Seamline.SharedKernel;
 using Seamline.Modules.Risk.Internal;
@@ -189,6 +191,27 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 
 app.MapHealthChecks("/health").AllowAnonymous();
+app.MapHealthChecks("/health/detail", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = new
+        {
+            status = report.Status.ToString(),
+            duration = report.TotalDuration.TotalMilliseconds,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                duration = e.Value.Duration.TotalMilliseconds,
+                error = e.Value.Exception?.Message,
+            }),
+        };
+        await context.Response.WriteAsync(JsonSerializer.Serialize(result,
+            new JsonSerializerOptions { WriteIndented = true }));
+    },
+}).AllowAnonymous();
 
 app.MapAuthEndpoints();
 app.MapReferenceEndpoints();

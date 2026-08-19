@@ -82,9 +82,15 @@ graph TB
 - Solid arrows = MassTransit integration events (via RabbitMQ). Dotted = in-process query interfaces (DI).
 - Module boundaries enforced by [57 architecture tests](#architecture) in CI, not by convention.
 - Multi-tenant: shared schema + `tenant_id` global filter + PostgreSQL RLS, tenant claim in JWT.
+- Transactional outbox ([ADR-0004](docs/adr/0004-transactional-outbox.md)): events
+  are written to `messaging.OutboxMessage` in the same DB transaction as business
+  data — no dual-write risk. Delivery and deduplication are handled by MassTransit's
+  inbox/outbox infrastructure.
 - Hangfire schedules EOD jobs in both workers, each with its own PostgreSQL
   schema (`hangfire_valuation`, `hangfire_reporting`) so the scheduler never
   deserializes the other worker's job types. See [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md).
+- CI/CD: one GitHub Actions pipeline deploys to both clouds via OIDC workload
+  identity federation — no stored credentials ([ADR-0024](docs/adr/0024-github-actions-federation.md)).
 
 Each module is two projects — `Seamline.Modules.<Name>` (implementation) and
 `Seamline.Modules.<Name>.Contracts` (public surface: DTOs, query interfaces,
@@ -237,7 +243,8 @@ Once running, these are available on localhost:
 | Service | URL | Notes |
 |---|---|---|
 | API | http://localhost:5000 | All endpoints (see below) |
-| Health check | http://localhost:5000/health | Postgres + MassTransit bus |
+| Health check | http://localhost:5000/health | 200/503 for load balancers |
+| Health detail | http://localhost:5000/health/detail | JSON with per-check status and latency |
 | Grafana | http://localhost:3000 | Anonymous viewer, admin/admin |
 | Prometheus | http://localhost:9090 | Raw metrics query UI |
 | OTel Collector | http://localhost:4317 (gRPC), :4318 (HTTP) | OTLP receiver |
@@ -282,7 +289,8 @@ One GitHub Actions pipeline, OIDC into both clouds, no stored credentials:
 All processes emit OpenTelemetry traces and metrics (ASP.NET Core, HTTP
 client, Npgsql connection pool, MassTransit) to any OTLP-compatible collector.
 The API exposes `/health` (Postgres + MassTransit bus checks) for load
-balancer health probes.
+balancer health probes, and `/health/detail` with per-dependency JSON
+(status, latency, error) for human/dashboard consumption.
 
 Multi-stage Dockerfiles keep images lean: `aspnet:10.0` for the API and
 both workers (modules transitively reference `Microsoft.AspNetCore.App`).

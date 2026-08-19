@@ -261,7 +261,7 @@ static async Task EnsureAppRoleAsync(IConfiguration configuration)
         END $body$;
         """;
     await using var setVars = conn.CreateCommand();
-    setVars.CommandText = "SELECT set_config('app.ensure_user', $1, true), set_config('app.ensure_pass', $2, true), set_config('app.ensure_db', $3, true)";
+    setVars.CommandText = "SELECT set_config('app.ensure_user', $1, false), set_config('app.ensure_pass', $2, false), set_config('app.ensure_db', $3, false)";
     setVars.Parameters.AddWithValue(appUser);
     setVars.Parameters.AddWithValue(appPassword);
     setVars.Parameters.AddWithValue(dbName);

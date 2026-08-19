@@ -16,6 +16,8 @@ mini SaaS CTRM demo project
 ![Azure](https://img.shields.io/badge/Azure-Container%20Apps%20%7C%20Service%20Bus-0078D4?logo=microsoftazure&logoColor=white)
 ![Bicep](https://img.shields.io/badge/Bicep-0078D4?logo=microsoftazure&logoColor=white)
 ![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-3B348B?logo=opentelemetry&logoColor=white)
+![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
 forwards, in .NET 10 — a modular monolith with boundaries and cloud portability
@@ -205,6 +207,12 @@ ADRs 0019–0024 form the **cloud portability lane** (Phase 5):
 | [0023](docs/adr/0023-container-apps-and-bicep.md) | Container Apps (not AKS) and Bicep alongside Terraform |
 | [0024](docs/adr/0024-github-actions-federation.md) | GitHub Actions with workload identity federation, not Azure DevOps |
 
+ADR-0025 sits outside the portability lane — it covers observability end to end:
+
+| ADR | Topic |
+|---|---|
+| [0025](docs/adr/0025-observability-stack.md) | Observability: vanilla OTel SDK + OTLP, ADOT sidecar on AWS, App Insights on Azure |
+
 More ADRs land as decisions are made — see `CLAUDE.md`.
 
 ## Running locally
@@ -258,16 +266,21 @@ balancer health probes.
 
 Multi-stage Dockerfiles keep images lean: `aspnet:10.0` for the API and
 both workers (modules transitively reference `Microsoft.AspNetCore.App`).
-A full `docker compose up` starts all six services locally (Postgres,
-RabbitMQ, acer-stub, api, valuation-worker, reporting-worker).
+A full `docker compose up` starts all nine services locally (Postgres,
+RabbitMQ, acer-stub, api, valuation-worker, reporting-worker, otel-collector,
+prometheus, grafana). Grafana is pre-provisioned at `http://localhost:3000`
+(anonymous viewer, admin/admin) with a `seamline-overview` dashboard: HTTP
+request rate/latency/errors, Npgsql connection pool, MassTransit consumer
+metrics, and .NET runtime (GC, heap, thread pool).
+See [ADR-0025](docs/adr/0025-observability-stack.md).
 
 ## Status
 
 **Phases 1–5 complete.**
 
-191 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
-10 MarketData unit + 57 architecture + 24 integration), all green.
-24 ADRs documenting every architectural decision as it was made.
+196 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
+10 MarketData unit + 57 architecture + 29 integration), all green.
+25 ADRs documenting every architectural decision as it was made.
 One pipeline deploys to both clouds via OIDC — no stored credentials.
 
 ### Phase 1 — skeleton and discipline

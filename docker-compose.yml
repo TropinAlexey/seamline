@@ -48,8 +48,9 @@ services:
     environment:
       ConnectionStrings__Postgres: "Host=postgres;Database=seamline;Username=seamline_app;Password=seamline_app"
       ConnectionStrings__PostgresMigrator: "Host=postgres;Database=seamline;Username=seamline;Password=seamline"
-      MessageBroker__Transport: RabbitMq
+      MessageBroker__Transport: RabbitMQ
       MessageBroker__RabbitMq__Host: rabbitmq
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,6 +64,7 @@ services:
     environment:
       ConnectionStrings__Postgres: "Host=postgres;Database=seamline;Username=seamline_app;Password=seamline_app"
       ConnectionStrings__PostgresMigrator: "Host=postgres;Database=seamline;Username=seamline;Password=seamline"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,11 +77,49 @@ services:
       ConnectionStrings__Postgres: "Host=postgres;Database=seamline;Username=seamline_app;Password=seamline_app"
       ConnectionStrings__PostgresMigrator: "Host=postgres;Database=seamline;Username=seamline;Password=seamline"
       AcerStub__BaseUrl: "http://acer-stub:8080"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       postgres:
         condition: service_healthy
       acer-stub:
         condition: service_started
+
+  # --- Observability stack (local dev only) ---
+  # In cloud, OTEL_EXPORTER_OTLP_ENDPOINT points at the provider's managed
+  # OTLP intake (CloudWatch, Application Insights) — no sidecar needed.
+  # See ADR-0019: "telemetry — identical. OTLP export is endpoint-only."
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    volumes:
+      - ./docker/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  prometheus:
+    image: prom/prometheus:v3.4.2
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
 
 volumes:
   seamline-postgres-data:

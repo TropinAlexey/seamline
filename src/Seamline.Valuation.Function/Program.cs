@@ -19,6 +19,7 @@ builder.Services.AddOpenTelemetry()
         .AddOtlpExporter())
     .WithMetrics(m => m
         .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
         .AddMeter("Npgsql")
         .AddOtlpExporter());
 

@@ -58,6 +58,25 @@ locals {
       "awslogs-stream-prefix" = "ecs"
     }
   }
+
+  # ADOT sidecar: accepts OTLP from the app container on localhost:4317,
+  # signs requests with SigV4 via task role credentials, exports to
+  # CloudWatch Metrics + X-Ray Traces. The app's vanilla OTel SDK can't
+  # sign requests itself — this is the standard AWS pattern for ECS Fargate.
+  adot_sidecar = {
+    name      = "otel-collector"
+    image     = "public.ecr.aws/aws-observability/aws-otel-collector:v0.43.1"
+    essential = false
+    command   = ["--config=/etc/ecs/ecs-cloudwatch-xray.yaml"]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "otel"
+      }
+    }
+  }
 }
 
 # --- RabbitMQ ---
@@ -149,23 +168,27 @@ resource "aws_ecs_task_definition" "api" {
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
-  container_definitions = jsonencode([{
-    name         = "api"
-    image        = "${local.ecr_prefix}/seamline-api:${var.api_image_tag}"
-    essential    = true
-    portMappings = [{ containerPort = 8080, protocol = "tcp" }]
-    environment = [
-      { name = "MessageBroker__Transport", value = "RabbitMq" },
-      { name = "MessageBroker__RabbitMq__Host", value = "rabbitmq.seamline.local" },
-      { name = "MessageBroker__RabbitMq__Username", value = "seamline" },
-    ]
-    secrets = [
-      { name = "ConnectionStrings__Postgres", valueFrom = aws_secretsmanager_secret.app_conn.arn },
-      { name = "ConnectionStrings__PostgresMigrator", valueFrom = aws_secretsmanager_secret.migrator_conn.arn },
-      { name = "MessageBroker__RabbitMq__Password", valueFrom = aws_secretsmanager_secret.rabbitmq_password.arn },
-    ]
-    logConfiguration = local.log_config
-  }])
+  container_definitions = jsonencode([
+    {
+      name         = "api"
+      image        = "${local.ecr_prefix}/seamline-api:${var.api_image_tag}"
+      essential    = true
+      portMappings = [{ containerPort = 8080, protocol = "tcp" }]
+      environment = [
+        { name = "MessageBroker__Transport", value = "RabbitMq" },
+        { name = "MessageBroker__RabbitMq__Host", value = "rabbitmq.seamline.local" },
+        { name = "MessageBroker__RabbitMq__Username", value = "seamline" },
+        { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://localhost:4317" },
+      ]
+      secrets = [
+        { name = "ConnectionStrings__Postgres", valueFrom = aws_secretsmanager_secret.app_conn.arn },
+        { name = "ConnectionStrings__PostgresMigrator", valueFrom = aws_secretsmanager_secret.migrator_conn.arn },
+        { name = "MessageBroker__RabbitMq__Password", valueFrom = aws_secretsmanager_secret.rabbitmq_password.arn },
+      ]
+      logConfiguration = local.log_config
+    },
+    local.adot_sidecar,
+  ])
 }
 
 resource "aws_ecs_service" "api" {
@@ -195,20 +218,26 @@ resource "aws_ecs_task_definition" "valuation_worker" {
   family                   = "seamline-valuation-worker"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
-  container_definitions = jsonencode([{
-    name      = "valuation-worker"
-    image     = "${local.ecr_prefix}/seamline-valuation-worker:${var.valuation_worker_image_tag}"
-    essential = true
-    secrets = [
-      { name = "ConnectionStrings__Postgres", valueFrom = aws_secretsmanager_secret.app_conn.arn },
-    ]
-    logConfiguration = local.log_config
-  }])
+  container_definitions = jsonencode([
+    {
+      name      = "valuation-worker"
+      image     = "${local.ecr_prefix}/seamline-valuation-worker:${var.valuation_worker_image_tag}"
+      essential = true
+      environment = [
+        { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://localhost:4317" },
+      ]
+      secrets = [
+        { name = "ConnectionStrings__Postgres", valueFrom = aws_secretsmanager_secret.app_conn.arn },
+      ]
+      logConfiguration = local.log_config
+    },
+    local.adot_sidecar,
+  ])
 }
 
 resource "aws_ecs_service" "valuation_worker" {
@@ -230,23 +259,27 @@ resource "aws_ecs_task_definition" "reporting_worker" {
   family                   = "seamline-reporting-worker"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
-  container_definitions = jsonencode([{
-    name      = "reporting-worker"
-    image     = "${local.ecr_prefix}/seamline-reporting-worker:${var.reporting_worker_image_tag}"
-    essential = true
-    environment = [
-      { name = "AcerStub__BaseUrl", value = "http://acer-stub.seamline.local:8080" },
-    ]
-    secrets = [
-      { name = "ConnectionStrings__Postgres", valueFrom = aws_secretsmanager_secret.app_conn.arn },
-    ]
-    logConfiguration = local.log_config
-  }])
+  container_definitions = jsonencode([
+    {
+      name      = "reporting-worker"
+      image     = "${local.ecr_prefix}/seamline-reporting-worker:${var.reporting_worker_image_tag}"
+      essential = true
+      environment = [
+        { name = "AcerStub__BaseUrl", value = "http://acer-stub.seamline.local:8080" },
+        { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "http://localhost:4317" },
+      ]
+      secrets = [
+        { name = "ConnectionStrings__Postgres", valueFrom = aws_secretsmanager_secret.app_conn.arn },
+      ]
+      logConfiguration = local.log_config
+    },
+    local.adot_sidecar,
+  ])
 }
 
 resource "aws_ecs_service" "reporting_worker" {

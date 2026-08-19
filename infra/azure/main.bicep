@@ -96,6 +96,8 @@ module apps 'modules/container-apps.bicep' = {
     location: location
     projectName: projectName
     logAnalyticsWorkspaceId: monitoring.outputs.workspaceId
+    appInsightsOtlpEndpoint: monitoring.outputs.appInsightsOtlpEndpoint
+    appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
     workloadIdentityId: identity.outputs.workloadIdentityId
     workloadClientId: identity.outputs.workloadClientId
     acrLoginServer: acr.outputs.loginServer

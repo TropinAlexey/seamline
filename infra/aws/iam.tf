@@ -40,3 +40,21 @@ resource "aws_iam_role" "ecs_task" {
   name               = "seamline-ecs-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
 }
+
+resource "aws_iam_role_policy" "ecs_task_otel" {
+  name = "otel-export"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords",
+        "cloudwatch:PutMetricData",
+      ]
+      Resource = "*"
+    }]
+  })
+}

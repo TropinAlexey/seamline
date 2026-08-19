@@ -4,6 +4,8 @@ param logAnalyticsWorkspaceId string
 param workloadIdentityId string
 param workloadClientId string
 param acrLoginServer string
+param appInsightsOtlpEndpoint string
+param appInsightsInstrumentationKey string
 param apiImageTag string = 'latest'
 param valuationWorkerImageTag string = 'latest'
 param reportingWorkerImageTag string = 'latest'
@@ -57,6 +59,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           resources: { cpu: json('0.5'), memory: '1Gi' }
           env: [
             { name: 'AZURE_CLIENT_ID', value: workloadClientId }
+            { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: appInsightsOtlpEndpoint }
+            { name: 'OTEL_EXPORTER_OTLP_HEADERS', value: 'x-ms-ikey=${appInsightsInstrumentationKey}' }
           ]
         }
       ]
@@ -92,6 +96,8 @@ resource valuationWorker 'Microsoft.App/containerApps@2024-03-01' = {
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
           env: [
             { name: 'AZURE_CLIENT_ID', value: workloadClientId }
+            { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: appInsightsOtlpEndpoint }
+            { name: 'OTEL_EXPORTER_OTLP_HEADERS', value: 'x-ms-ikey=${appInsightsInstrumentationKey}' }
           ]
         }
       ]
@@ -127,6 +133,8 @@ resource reportingWorker 'Microsoft.App/containerApps@2024-03-01' = {
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
           env: [
             { name: 'AZURE_CLIENT_ID', value: workloadClientId }
+            { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: appInsightsOtlpEndpoint }
+            { name: 'OTEL_EXPORTER_OTLP_HEADERS', value: 'x-ms-ikey=${appInsightsInstrumentationKey}' }
           ]
         }
       ]

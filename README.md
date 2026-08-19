@@ -248,7 +248,7 @@ Once running, these are available on localhost:
 | Grafana | http://localhost:3000 | Anonymous viewer, admin/admin |
 | Prometheus | http://localhost:9090 | Raw metrics query UI |
 | OTel Collector | http://localhost:4317 (gRPC), :4318 (HTTP) | OTLP receiver |
-| RabbitMQ Management | http://localhost:15672 | seamline / seamline |
+| RabbitMQ Management | http://localhost:15672 | guest / guest |
 | PostgreSQL | localhost:5432 | seamline / seamline |
 
 Grafana ships with a pre-provisioned **Seamline Overview** dashboard
@@ -257,7 +257,59 @@ latency p95, 5xx errors, Npgsql connection pool, MassTransit receive rate
 and consumer duration, .NET runtime (working set, GC, heap, thread pool,
 exceptions, CPU). All panels respond to the `$service` dropdown.
 
-![Grafana dashboard under load](docs/grafana-load-test.png)
+![Grafana dashboard — staircase load test (18K trades, 3 tenants, 4 phases)](docs/grafana-load-test.png)
+
+### Load testing
+
+`scripts/load-test.sh` exercises the full trade lifecycle across multiple
+tenants concurrently: counterparty → trade → submit → credit check →
+approve/reject → amend → deliver → invoice, with mid-run EOD curve repricing
+and cross-tenant isolation verification.
+
+```bash
+./scripts/load-test.sh                            # 100 trades × 3 tenants (300 total)
+./scripts/load-test.sh --trades 1000 --tenants 5  # 5000 trades, 5 tenants
+./scripts/load-test.sh --ramp                     # staircase: 10→100→1000→5000/tenant
+./scripts/load-test.sh --smoke                    # 1 trade, 1 tenant (CI smoke)
+```
+
+`--ramp` runs a four-phase staircase with 15s cooldowns between phases
+so Grafana renders clean steps:
+
+| Phase | Trades/tenant | Concurrency | Purpose |
+|---|---|---|---|
+| 1: warm-up | 10 | 5 | Baseline floor for all panels |
+| 2: normal | 100 | 15 | Typical business day, no contention |
+| _EOD repricing_ | — | — | _All curve points updated (market close)_ |
+| 3: high | 1000 | 30 | Latency inflection, pool approaching max |
+| _Curve correction_ | — | — | _POWER prices fixed post-valuation (re-run scenario)_ |
+| 4: stress | 5000 | 50 | Saturation + live market curve churn in background |
+
+Phase 4 runs ~30 random curve point updates concurrently with trading —
+simulating intraday price ticks arriving while traders book deals.
+Connection pool exhaustion, 5xx spikes, and exception bursts are expected
+at this level; the point is to see the system degrade gracefully and
+recover after the burst.
+
+Each trade lifecycle exercises all three user roles (FO trader books,
+MO risk officer approves/rejects credit breaches, BO backoffice reads
+invoices) and triggers MassTransit events across Risk, Settlement, and
+Audit modules. Realistic chaos: 30% of trades are amended (price
+renegotiation), 40% delivered (triggering invoices), 20% of
+credit-pending trades rejected, 5% cancelled mid-flight.
+
+All parameters are combinable — `--ramp --tenants 10 --concurrency 40`
+runs the staircase across 10 tenants at higher parallelism. Tenant count
+scales linearly (each tenant gets its own users, counterparties, and
+curve points seeded via `psql`), so `--tenants 100` produces 100×
+the trade volume per phase.
+
+Requires `curl`, `psql`, and `python3` (for PBKDF2 password hashing when
+seeding additional tenants). On Windows, run under WSL — the script uses
+bash process forking, associative arrays, and `psql`, none of which have
+direct PowerShell equivalents. Against a local `docker compose up`, the
+default run (300 trades, 3 tenants) completes in ~10s; `--ramp` runs
+~18K trades in ~20 minutes with verified cross-tenant isolation.
 
 Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) uses a synthetic
 price source by default — no configuration needed. To opt a commodity into
@@ -356,7 +408,7 @@ One pipeline deploys to both clouds via OIDC — no stored credentials.
 
 ### Phase 3 — deploy
 
-- Multi-stage Dockerfiles, `docker-compose.yml` (6 services).
+- Multi-stage Dockerfiles, `docker-compose.yml` (9 services).
 - Terraform infrastructure (`infra/aws/`): VPC, RDS, ECS Fargate, ALB, ECR,
   Secrets Manager, GitHub OIDC provider.
 - GitHub Actions CI/CD: OIDC auth → matrix docker build → push to ECR.

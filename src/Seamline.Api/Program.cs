@@ -205,7 +205,7 @@ app.MapHealthChecks("/health/detail", new HealthCheckOptions
                 name = e.Key,
                 status = e.Value.Status.ToString(),
                 duration = e.Value.Duration.TotalMilliseconds,
-                error = e.Value.Exception?.Message,
+                error = app.Environment.IsDevelopment() ? e.Value.Exception?.Message : null,
             }),
         };
         await context.Response.WriteAsync(JsonSerializer.Serialize(result,
@@ -244,14 +244,27 @@ static async Task EnsureAppRoleAsync(IConfiguration configuration)
     await conn.OpenAsync();
 
     await using var cmd = conn.CreateCommand();
-    cmd.CommandText = $"""
-        DO $$
+    // Values passed as Npgsql parameters, then injected into the DO block
+    // via format(%I/%L) to avoid SQL injection from connection-string values
+    // that contain apostrophes or special characters.
+    cmd.CommandText = """
+        DO $body$
+        DECLARE
+            v_user text := current_setting('app.ensure_user');
+            v_pass text := current_setting('app.ensure_pass');
+            v_db   text := current_setting('app.ensure_db');
         BEGIN
-            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{appUser}') THEN
-                EXECUTE format('CREATE ROLE %I WITH LOGIN PASSWORD %L', '{appUser}', '{appPassword}');
-                EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', '{dbName}', '{appUser}');
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = v_user) THEN
+                EXECUTE format('CREATE ROLE %I WITH LOGIN PASSWORD %L', v_user, v_pass);
+                EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', v_db, v_user);
             END IF;
-        END $$;
+        END $body$;
         """;
+    await using var setVars = conn.CreateCommand();
+    setVars.CommandText = "SELECT set_config('app.ensure_user', $1, true), set_config('app.ensure_pass', $2, true), set_config('app.ensure_db', $3, true)";
+    setVars.Parameters.AddWithValue(appUser);
+    setVars.Parameters.AddWithValue(appPassword);
+    setVars.Parameters.AddWithValue(dbName);
+    await setVars.ExecuteNonQueryAsync();
     await cmd.ExecuteNonQueryAsync();
 }

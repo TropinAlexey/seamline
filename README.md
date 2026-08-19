@@ -1,7 +1,7 @@
-<img src="docs/seamline-icon.png" alt="seamline" width="96" align="left" />
+<img src="docs/seamline-icon.png" alt="seamline" width="196" align="left" />
 
-# seamline
-mini SaaS CTRM demo project
+# Seamline
+_mini SaaS CTRM demo project_
 
 [![CI](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml)
 [![Deploy](https://github.com/TropinAlexey/seamline/actions/workflows/deploy.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/deploy.yml)
@@ -20,24 +20,56 @@ mini SaaS CTRM demo project
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
-forwards, in .NET 10 — a modular monolith with boundaries and cloud portability
-enforced in CI, and two services extracted on purpose.
+forwards in .NET 10 — modular monolith with boundaries enforced in CI,
+two services extracted on purpose, dual-cloud deploy via OIDC.
 
-<br clear="left" />
+**All five phases complete.** 196 tests, 25 ADRs, one pipeline to both clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
 > Clean-room implementation. No code, schemas, or business rules from any
 > employer or commercial CTRM product.
 
-## Why this domain
+## Running locally
 
-Commodity trading gives every architectural decision here a real reason to
-exist instead of a contrived one: trades are versioned because a regulator requires reporting a trade
-as it stood at the moment of reporting, not as it stands now; a worker is
-extracted for mark-to-market because revaluing a whole book on a curve
-update is a genuinely different load profile from an HTTP request; a saga
-has a real compensating transaction because credit limits are reserved and
-released, not invented to demonstrate a saga.
+```bash
+# Full stack (all 9 services):
+docker compose up -d
+
+# Or individual processes against a local Postgres + RabbitMQ:
+docker compose up -d postgres rabbitmq acer-stub
+dotnet run --project src/Seamline.Api                # migrates every module's schema on startup
+dotnet run --project src/Seamline.Valuation.Worker    # optional — EOD MtM + curve import
+dotnet run --project src/Seamline.Reporting.Worker    # optional — EOD REMIT batch
+
+# Build and test:
+dotnet build SeamlineCtrm.sln
+dotnet test SeamlineCtrm.sln
+```
+
+Once running, these are available on localhost:
+
+| Service | URL | Notes |
+|---|---|---|
+| API | http://localhost:5000 | All endpoints ([see API table](#api)) |
+| Health check | http://localhost:5000/health | 200/503 for load balancers |
+| Health detail | http://localhost:5000/health/detail | Per-check JSON (status, latency) |
+| Grafana | http://localhost:3000 | Anonymous viewer, admin/admin |
+| Prometheus | http://localhost:9090 | Raw metrics query UI |
+| OTel Collector | http://localhost:4317 (gRPC), :4318 (HTTP) | OTLP receiver |
+| RabbitMQ Management | http://localhost:15672 | guest / guest |
+| PostgreSQL | localhost:5432 | seamline / seamline |
+
+`POST /auth/login` with `{"tenantId": "11111111-1111-1111-1111-111111111111",
+"login": "trader", "password": "Demo-Password-123!"}` (or `risk`/`backoffice`
+for the MO/BO demo users) returns a JWT — every other endpoint requires
+`Authorization: Bearer <token>`. See [ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md).
+
+Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) uses a synthetic
+price source by default — no configuration needed. To opt a commodity into
+a real source, set `MarketData:CurveImport:Sources:POWER=EntsoE` (with
+`MarketData:CurveImport:EntsoE:ApiToken`, a free ENTSO-E Transparency
+Platform token) or `MarketData:CurveImport:Sources:GAS=Eia` (with
+`MarketData:CurveImport:Eia:ApiKey`, a free EIA Open Data API key).
 
 ## Architecture
 
@@ -78,26 +110,91 @@ graph TB
     RMQ --> AUD
 ```
 
-**Key design points:**
 - Solid arrows = MassTransit integration events (via RabbitMQ). Dotted = in-process query interfaces (DI).
-- Module boundaries enforced by [57 architecture tests](#architecture) in CI, not by convention.
+- Module boundaries enforced by [57 architecture tests](#testing-strategy) in CI, not by convention.
 - Multi-tenant: shared schema + `tenant_id` global filter + PostgreSQL RLS, tenant claim in JWT.
-- Transactional outbox ([ADR-0004](docs/adr/0004-transactional-outbox.md)): events
-  are written to `messaging.OutboxMessage` in the same DB transaction as business
-  data — no dual-write risk. Delivery and deduplication are handled by MassTransit's
-  inbox/outbox infrastructure.
-- Hangfire schedules EOD jobs in both workers, each with its own PostgreSQL
-  schema (`hangfire_valuation`, `hangfire_reporting`) so the scheduler never
-  deserializes the other worker's job types. See [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md).
-- CI/CD: one GitHub Actions pipeline deploys to both clouds via OIDC workload
-  identity federation — no stored credentials ([ADR-0024](docs/adr/0024-github-actions-federation.md)).
+- Transactional outbox ([ADR-0004](docs/adr/0004-transactional-outbox.md)): events written in the same DB transaction as business data — no dual-write risk.
+- Hangfire schedules EOD jobs in both workers, each in its own schema (`hangfire_valuation`, `hangfire_reporting`) — see [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md).
+- CI/CD: one GitHub Actions pipeline deploys to both clouds via OIDC — no stored credentials ([ADR-0024](docs/adr/0024-github-actions-federation.md)).
 
-Each module is two projects — `Seamline.Modules.<Name>` (implementation) and
-`Seamline.Modules.<Name>.Contracts` (public surface: DTOs, query interfaces,
-integration events). A module's implementation can never reference another
-module's implementation — not by convention, but because implementation
-types are `internal` and the dependency itself is forbidden by an
-architecture test that runs in CI:
+Each module is two projects — `Seamline.Modules.<Name>` (implementation,
+`internal` types) and `Seamline.Modules.<Name>.Contracts` (public DTOs,
+query interfaces, integration events). A module's implementation can never
+reference another module's implementation — enforced by architecture tests
+in CI, not by convention.
+
+Two components are extracted from the monolith on purpose:
+`Valuation.Worker` (end-of-day MtM) and `Reporting.Worker` (simplified
+REMIT submission). Both share the same PostgreSQL database — this is
+service-based architecture, not database-per-service. Each is a second
+composition root hosting the same module code. See
+[ADR-0001](docs/adr/0001-modular-monolith.md)/[ADR-0002](docs/adr/0002-service-extraction-criteria.md)
+for extraction criteria, [ADR-0014](docs/adr/0014-valuation-worker.md)/[ADR-0015](docs/adr/0015-reporting-worker.md)
+for what each worker computes.
+
+## Scope boundaries
+
+- Physical forwards only, power and gas. No options.
+- Monthly delivery periods only.
+- Mark-to-market: `(forward_price − trade_price) × volume`. Flat monthly
+  curve points — no interpolation, shaping, or cascading.
+- No VaR. Stress scenarios instead ([ADR-0016](docs/adr/0016-stress-scenarios.md)):
+  a flat ±10% shock across every curve, and a sharper ±25% shock isolated
+  to a position's own commodity — fixed magnitudes, not user-configurable.
+- REMIT: simplified XML against `Seamline.AcerStub`, a stub regulator
+  endpoint — not a compliant REMIT/ACER implementation. See
+  [ADR-0015](docs/adr/0015-reporting-worker.md).
+- Auth ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)): JWT signing
+  key lives in `appsettings.json` as a static dev-only secret, not a real
+  secrets store — fine for a local/demo project, explicitly not a
+  production posture. Three demo users (one per FO/MO/BO role) are seeded
+  by the `Identity` module's `InitialCreate` migration with a documented
+  password (`Demo-Password-123!`) for a fixed demo tenant
+  (`11111111-1111-1111-1111-111111111111`).
+
+## API
+
+All endpoints require `Authorization: Bearer <token>` unless noted.
+OpenAPI spec is available at `/openapi/v1.json` in development mode.
+
+| Method | Path | Role | Description |
+|---|---|---|---|
+| `POST` | `/auth/login` | anonymous | Returns JWT |
+| `GET` | `/counterparties/` | FO | List counterparties |
+| `POST` | `/counterparties/` | FO | Create counterparty |
+| `GET` | `/trades/` | FO | List trades |
+| `POST` | `/trades/` | FO | Create trade (draft) |
+| `POST` | `/trades/{id}/submit` | FO | Submit draft → credit check |
+| `POST` | `/trades/{id}/approve` | MO | Approve credit-pending trade |
+| `POST` | `/trades/{id}/reject` | MO | Reject credit-pending trade |
+| `POST` | `/trades/{id}/amend` | FO | Amend active trade (new version) |
+| `POST` | `/trades/{id}/deliver` | FO | Mark trade as delivered |
+| `POST` | `/trades/{id}/cancel` | FO | Cancel trade |
+| `GET` | `/positions` | FO, MO | MtM positions per commodity × period |
+| `GET` | `/invoices` | BO | Settlement invoices |
+| `GET` | `/curve-points/` | FO | List forward curve points |
+| `POST` | `/curve-points/` | FO | Upsert curve point |
+| `GET` | `/stress-scenarios` | MO | Stress scenario results |
+| `GET` | `/health` | anonymous | Aggregate health (200/503) |
+| `GET` | `/health/detail` | anonymous | Per-check JSON (status, latency) |
+
+## Testing strategy
+
+196 tests across three layers:
+
+| Layer | Count | What it covers |
+|---|---|---|
+| Unit (Trading, Risk, Identity, MarketData) | 110 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions, password hashing, curve import |
+| Architecture | 57 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default |
+| Integration | 29 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery |
+
+**What's deliberately not covered:** no contract tests between modules
+(arch tests enforce the boundary; contracts are DTOs with no logic to test);
+no E2E browser tests (no UI); saga timeout paths are unit-tested with
+MassTransit's test harness, not in integration (the timeout is a
+`Schedule<>` concern, not an HTTP concern).
+
+<details><summary>Example: what an architecture test looks like</summary>
 
 ```csharp
 [Theory]
@@ -123,9 +220,7 @@ public void Module_implementation_must_not_depend_on_another_modules_implementat
 ```
 _(verbatim from `tests/Seamline.ArchTests/ModuleBoundaryTests.cs`)_
 
-That's one of seven rules `Seamline.ArchTests` runs on every build, each
-stated as prose somewhere in `CLAUDE.md` or an ADR and enforced here instead
-of trusted to hold:
+That's one of seven rules enforced on every build:
 
 | Rule | Where it's stated |
 |---|---|
@@ -133,52 +228,135 @@ of trusted to hold:
 | A `.Contracts` assembly never depends on any implementation | `CLAUDE.md` |
 | A `.Contracts` assembly depends on nothing but `SharedKernel` | `CLAUDE.md` |
 | Money and volume fields are never `double`/`float` | `CLAUDE.md`, [ADR-0007](docs/adr/0007-decimal-rounding.md) |
-| An implementation assembly exposes nothing public beyond its DI/endpoint composition root | `CLAUDE.md` ("internal by default") |
+| An implementation assembly exposes nothing public beyond its DI/endpoint composition root | `CLAUDE.md` |
 | No migration adds a foreign key across module schemas | `CLAUDE.md` |
 | No module or `.Contracts` assembly references `AWSSDK.*` or `Azure.*` packages | [ADR-0021](docs/adr/0021-portability-enforced-in-ci.md) |
 
 The last one runs each migration's `Up()` against a real `MigrationBuilder`
 and inspects the resulting operations — including foreign keys declared
-inline inside `CreateTable`, which don't show up as a top-level operation
-and would otherwise make the check pass vacuously.
+inline inside `CreateTable`, which don't show up as a top-level operation.
 
-Two components are extracted from the monolith on purpose, and both have
-now landed: `Valuation.Worker` (end-of-day mark-to-market) and
-`Reporting.Worker` (end-of-day simplified REMIT submission). Both share the
-same PostgreSQL database — this is service-based architecture, stated as
-such, not database-per-service. Neither is a new module: each is a second
-(third) composition root referencing a module's implementation project
-directly, the same relationship `Seamline.Api` already has with every
-module — `Valuation.Worker` hosts `Risk`'s valuation logic,
-`Reporting.Worker` hosts `Trading`'s REMIT batch, both reached through one
-public extension method each rather than a curated subset of the module's
-internals. See `docs/adr/0001`/`docs/adr/0002` for the extraction criteria,
-`docs/adr/0014`/`docs/adr/0015` for what each worker actually computes.
-`Reporting.Worker` submits against `Seamline.AcerStub`, a minimal stand-in
-regulator endpoint (random 500s/timeouts/duplicates) that only exists to
-give the retry/idempotency logic something genuinely flaky to run against.
+</details>
 
-## Scope boundaries
+## Load testing
 
-- Physical forwards only, power and gas. No options.
-- Monthly delivery periods only.
-- Mark-to-market: `(forward_price − trade_price) × volume`. Flat monthly
-  curve points — no interpolation, shaping, or cascading.
-- No VaR. Stress scenarios instead ([ADR-0016](docs/adr/0016-stress-scenarios.md)):
-  a flat ±10% shock across every curve, and a sharper ±25% shock isolated
-  to a position's own commodity — fixed magnitudes, not user-configurable.
-- REMIT: simplified XML against `Seamline.AcerStub`, a stub regulator
-  endpoint — not a compliant REMIT/ACER implementation. See
-  [ADR-0015](docs/adr/0015-reporting-worker.md).
-- Auth ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)): JWT signing
-  key lives in `appsettings.json` as a static dev-only secret, not a real
-  secrets store — fine for a local/demo project, explicitly not a
-  production posture. Three demo users (one per Front Office/Middle Office/Back Office role) are seeded
-  by the `Identity` module's `InitialCreate` migration with a documented
-  password (`Demo-Password-123!`) for a fixed demo tenant
-  (`11111111-1111-1111-1111-111111111111`).
+`scripts/load-test.sh` exercises the full trade lifecycle across multiple
+tenants concurrently: counterparty → trade → submit → credit check →
+approve/reject → amend → deliver → invoice, with mid-run EOD curve repricing
+and cross-tenant isolation verification.
 
-## ADRs
+```bash
+# quick check (~10s, 300 trades)
+docker compose up -d && ./scripts/load-test.sh
+
+# staircase to saturation (~20 min, 18K trades) — open Grafana at localhost:3000
+docker compose up -d && ./scripts/load-test.sh --ramp
+
+# scale up: 10 tenants, 500 trades each, concurrency 40
+docker compose up -d && ./scripts/load-test.sh --tenants 10 --trades 500 --concurrency 40
+
+# CI smoke (1 trade, exits non-zero on failure)
+./scripts/load-test.sh --smoke
+```
+
+Prerequisites: `curl`, `psql`, `python3`. On Windows use WSL.
+
+`--ramp` runs a four-phase staircase with 15s cooldowns between phases
+so Grafana renders clean steps:
+
+| Phase | Trades/tenant | Concurrency | Purpose |
+|---|---|---|---|
+| 1: warm-up | 10 | 5 | Baseline floor for all panels |
+| 2: normal | 100 | 15 | Typical business day, no contention |
+| _EOD repricing_ | — | — | _All curve points updated (market close)_ |
+| 3: high | 1000 | 30 | Latency inflection, pool approaching max |
+| _Curve correction_ | — | — | _POWER prices fixed post-valuation (re-run scenario)_ |
+| 4: stress | 5000 | 50 | Saturation + live market curve churn in background |
+
+Each trade lifecycle exercises all three user roles (FO books, MO
+approves/rejects, BO reads invoices) with realistic chaos: 30% amended,
+40% delivered, 20% credit-rejected, 5% cancelled mid-flight. All
+parameters are combinable (`--ramp --tenants 10 --concurrency 40`).
+
+![Grafana dashboard — staircase load test (18K trades, 3 tenants, 4 phases)](docs/grafana-load-test.png)
+
+Staircase result: throughput saturates at Phase 4 (37 → 13 req/s),
+p95 latency inflects to 5–7s, exceptions spike from pool exhaustion —
+but 5xx errors plateau (graceful degradation, not cascade). All metrics
+return to baseline within seconds after the burst.
+
+## Observability
+
+All processes emit OpenTelemetry traces and metrics via OTLP
+([ADR-0025](docs/adr/0025-observability-stack.md)):
+
+| Signal | Sources |
+|---|---|
+| Traces | ASP.NET Core, HttpClient, Npgsql, MassTransit |
+| Metrics | HTTP request rate/latency/errors, Npgsql connection pool (active/idle/pending), MassTransit consumer duration/receive rate, .NET runtime (GC, heap, working set, thread pool, exceptions, CPU) |
+| Health checks | `/health` (aggregate, for load balancers), `/health/detail` (per-check JSON, for dashboards) |
+
+Grafana ships pre-provisioned at `localhost:3000` with a 12-panel
+**Seamline Overview** dashboard. All panels respond to the `$service`
+dropdown.
+
+## Deploy
+
+Infrastructure is defined twice, side by side:
+
+- **`infra/aws/`** (Terraform): VPC, RDS PostgreSQL 17.5, ECS Fargate
+  (5 services), ALB, ECR, Secrets Manager, GitHub OIDC provider.
+- **`infra/azure/`** (Bicep): PostgreSQL Flexible Server, Container Apps,
+  ACR, Key Vault, Service Bus, Log Analytics, Entra federated credential.
+
+One GitHub Actions pipeline, OIDC into both clouds, no stored credentials.
+Both deploy steps are defined but disabled until infrastructure is
+provisioned.
+
+**Migrations** run at startup — each module calls `MigrateAsync()` before
+the app accepts traffic. With multiple instances, EF Core's migration lock
+(`__EFMigrationsHistory`) serializes execution. In production, a dedicated
+migration job (or init container) would run before the rolling deploy
+to avoid the startup penalty and remove `ALTER TABLE` permissions from
+the runtime identity.
+
+Multi-stage Dockerfiles keep images lean (`aspnet:10.0`). A full
+`docker compose up` starts all nine services locally.
+
+## Security considerations
+
+This is a demo project with deliberate simplifications — stated here
+rather than hidden:
+
+| What | Status | Production upgrade |
+|---|---|---|
+| JWT signing key | Static in `appsettings.json` | Azure Key Vault / AWS Secrets Manager + rotation |
+| Password hashing | PBKDF2-SHA256, 100K iterations | Argon2id (or ASP.NET Identity) |
+| Role-based auth | FO/MO/BO via JWT claim, fallback policy requires auth | Fine-grained permissions, RBAC middleware |
+| Multi-tenant isolation | EF Core global filter + PostgreSQL RLS | Same — this is production-grade |
+| Health detail endpoint | Anonymous, exception text hidden in prod | Behind auth or removed; export to Prometheus instead |
+| HTTPS | `UseHttpsRedirection()` in pipeline | TLS termination at ALB/App Gateway |
+| Rate limiting | None | ASP.NET `RateLimiter` middleware |
+| Audit trail | Append-only, `SELECT`/`INSERT` grants only | Same — this is production-grade |
+| Stored credentials | None — OIDC workload identity federation | Same |
+
+## Status
+
+| Phase | Focus | Highlights |
+|---|---|---|
+| 1 — skeleton | Module boundaries, domain, multi-tenancy | 7 arch-test rules in CI; credit-limit saga ([ADR-0008](docs/adr/0008-saga-placement-and-ownership.md)); full trade lifecycle ([ADR-0011](docs/adr/0011-trade-lifecycle-extension.md)); EF Core filter + PostgreSQL RLS ([ADR-0005](docs/adr/0005-multi-tenancy.md)); JWT FO/MO/BO roles ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)) |
+| 2 — async | Workers, real market data, RabbitMQ | `Valuation.Worker` EOD MtM ([ADR-0014](docs/adr/0014-valuation-worker.md)); `Reporting.Worker` REMIT ([ADR-0015](docs/adr/0015-reporting-worker.md)); stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)); RabbitMQ transport ([ADR-0017](docs/adr/0017-rabbitmq-transport.md)); ENTSO-E/EIA curve import ([ADR-0018](docs/adr/0018-curve-import.md)); MtM-based credit exposure |
+| 3 — deploy (AWS) | Docker, Terraform, CI/CD | Multi-stage Dockerfiles, `docker-compose.yml` (9 services); Terraform VPC/RDS/ECS/ALB/ECR; GitHub Actions OIDC → ECR push |
+| 4 — docs & polish | Architecture diagram, ADR consistency | Mermaid diagram, README structure, ADR style pass |
+| 5 — Azure | Cloud portability lane | Bicep infra ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)); Azure Service Bus transport ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)); Azure Functions Timer trigger ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)); portability arch-test ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)); one pipeline, both clouds ([ADR-0024](docs/adr/0024-github-actions-federation.md)) |
+
+The code delta between AWS and Azure is one thing: the MassTransit transport
+branch (`InMemory` | `RabbitMq` | `AzureServiceBus`). Everything else —
+secrets, compute, database, telemetry — is platform-abstracted or identical,
+enforced by an architecture test that fails the build if any `AWSSDK.*` or
+`Azure.*` package leaks into a module assembly ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)).
+
+<details><summary>ADRs (25 decisions)</summary>
 
 | ADR | Topic |
 |---|---|
@@ -200,239 +378,12 @@ give the retry/idempotency logic something genuinely flaky to run against.
 | [0016](docs/adr/0016-stress-scenarios.md) | Stress scenarios instead of VaR: flat and single-commodity shocks |
 | [0017](docs/adr/0017-rabbitmq-transport.md) | RabbitMQ transport, config-driven; in-memory transport for tests |
 | [0018](docs/adr/0018-curve-import.md) | Curve import: real free day-ahead sources (ENTSO-E, EIA), synthetic default |
-
-
-ADRs 0019–0024 form the **cloud portability lane** (Phase 5):
-
-| ADR | Topic |
-|---|---|
 | [0019](docs/adr/0019-cloud-portability-strategy.md) | Cloud portability: differences live in IaC and config, never in code |
 | [0020](docs/adr/0020-azure-service-bus-transport.md) | Azure Service Bus as a config-selected MassTransit transport |
 | [0021](docs/adr/0021-portability-enforced-in-ci.md) | Portability enforced in CI: no cloud SDK in module assemblies |
 | [0022](docs/adr/0022-serverless-valuation-trigger.md) | Serverless trigger: Azure Function Timer as an alternative to Hangfire |
 | [0023](docs/adr/0023-container-apps-and-bicep.md) | Container Apps (not AKS) and Bicep alongside Terraform |
 | [0024](docs/adr/0024-github-actions-federation.md) | GitHub Actions with workload identity federation, not Azure DevOps |
-
-ADR-0025 sits outside the portability lane — it covers observability end to end:
-
-| ADR | Topic |
-|---|---|
 | [0025](docs/adr/0025-observability-stack.md) | Observability: vanilla OTel SDK + OTLP, ADOT sidecar on AWS, App Insights on Azure |
 
-More ADRs land as decisions are made — see `CLAUDE.md`.
-
-## Running locally
-
-```bash
-# Full stack (all 9 services):
-docker compose up -d
-
-# Or individual processes against a local Postgres + RabbitMQ:
-docker compose up -d postgres rabbitmq acer-stub
-dotnet run --project src/Seamline.Api                # migrates every module's schema on startup
-dotnet run --project src/Seamline.Valuation.Worker    # optional — EOD MtM + curve import
-dotnet run --project src/Seamline.Reporting.Worker    # optional — EOD REMIT batch
-
-# Build and test:
-dotnet build SeamlineCtrm.sln
-dotnet test SeamlineCtrm.sln
-```
-
-Once running, these are available on localhost:
-
-| Service | URL | Notes |
-|---|---|---|
-| API | http://localhost:5000 | All endpoints (see below) |
-| Health check | http://localhost:5000/health | 200/503 for load balancers |
-| Health detail | http://localhost:5000/health/detail | JSON with per-check status and latency |
-| Grafana | http://localhost:3000 | Anonymous viewer, admin/admin |
-| Prometheus | http://localhost:9090 | Raw metrics query UI |
-| OTel Collector | http://localhost:4317 (gRPC), :4318 (HTTP) | OTLP receiver |
-| RabbitMQ Management | http://localhost:15672 | guest / guest |
-| PostgreSQL | localhost:5432 | seamline / seamline |
-
-Grafana ships with a pre-provisioned **Seamline Overview** dashboard
-([ADR-0025](docs/adr/0025-observability-stack.md)): HTTP request rate,
-latency p95, 5xx errors, Npgsql connection pool, MassTransit receive rate
-and consumer duration, .NET runtime (working set, GC, heap, thread pool,
-exceptions, CPU). All panels respond to the `$service` dropdown.
-
-![Grafana dashboard — staircase load test (18K trades, 3 tenants, 4 phases)](docs/grafana-load-test.png)
-
-### Load testing
-
-`scripts/load-test.sh` exercises the full trade lifecycle across multiple
-tenants concurrently: counterparty → trade → submit → credit check →
-approve/reject → amend → deliver → invoice, with mid-run EOD curve repricing
-and cross-tenant isolation verification.
-
-```bash
-./scripts/load-test.sh                            # 100 trades × 3 tenants (300 total)
-./scripts/load-test.sh --trades 1000 --tenants 5  # 5000 trades, 5 tenants
-./scripts/load-test.sh --ramp                     # staircase: 10→100→1000→5000/tenant
-./scripts/load-test.sh --smoke                    # 1 trade, 1 tenant (CI smoke)
-```
-
-`--ramp` runs a four-phase staircase with 15s cooldowns between phases
-so Grafana renders clean steps:
-
-| Phase | Trades/tenant | Concurrency | Purpose |
-|---|---|---|---|
-| 1: warm-up | 10 | 5 | Baseline floor for all panels |
-| 2: normal | 100 | 15 | Typical business day, no contention |
-| _EOD repricing_ | — | — | _All curve points updated (market close)_ |
-| 3: high | 1000 | 30 | Latency inflection, pool approaching max |
-| _Curve correction_ | — | — | _POWER prices fixed post-valuation (re-run scenario)_ |
-| 4: stress | 5000 | 50 | Saturation + live market curve churn in background |
-
-Phase 4 runs ~30 random curve point updates concurrently with trading —
-simulating intraday price ticks arriving while traders book deals.
-Connection pool exhaustion, 5xx spikes, and exception bursts are expected
-at this level; the point is to see the system degrade gracefully and
-recover after the burst.
-
-Each trade lifecycle exercises all three user roles (FO trader books,
-MO risk officer approves/rejects credit breaches, BO backoffice reads
-invoices) and triggers MassTransit events across Risk, Settlement, and
-Audit modules. Realistic chaos: 30% of trades are amended (price
-renegotiation), 40% delivered (triggering invoices), 20% of
-credit-pending trades rejected, 5% cancelled mid-flight.
-
-All parameters are combinable — `--ramp --tenants 10 --concurrency 40`
-runs the staircase across 10 tenants at higher parallelism. Tenant count
-scales linearly (each tenant gets its own users, counterparties, and
-curve points seeded via `psql`), so `--tenants 100` produces 100×
-the trade volume per phase.
-
-Requires `curl`, `psql`, and `python3` (for PBKDF2 password hashing when
-seeding additional tenants). On Windows, run under WSL — the script uses
-bash process forking, associative arrays, and `psql`, none of which have
-direct PowerShell equivalents. Against a local `docker compose up`, the
-default run (300 trades, 3 tenants) completes in ~10s; `--ramp` runs
-~18K trades in ~20 minutes with verified cross-tenant isolation.
-
-Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) uses a synthetic
-price source by default — no configuration needed. To opt a commodity into
-a real source, set `MarketData:CurveImport:Sources:POWER=EntsoE` (with
-`MarketData:CurveImport:EntsoE:ApiToken`, a free ENTSO-E Transparency
-Platform token) or `MarketData:CurveImport:Sources:GAS=Eia` (with
-`MarketData:CurveImport:Eia:ApiKey`, a free EIA Open Data API key).
-
-`POST /auth/login` with `{"tenantId": "11111111-1111-1111-1111-111111111111",
-"login": "trader", "password": "Demo-Password-123!"}` (or `risk`/`backoffice`
-for the MO/BO demo users) returns a JWT — every other endpoint requires
-`Authorization: Bearer <token>`. See [ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md).
-
-## Deploy
-
-Infrastructure is defined twice, side by side:
-
-- **`infra/aws/`** (Terraform): VPC, RDS PostgreSQL 17.5, ECS Fargate
-  (5 services), ALB, ECR, Secrets Manager, GitHub OIDC provider.
-- **`infra/azure/`** (Bicep): PostgreSQL Flexible Server, Container Apps,
-  ACR, Key Vault, Service Bus, Log Analytics, Entra federated credential.
-
-One GitHub Actions pipeline, OIDC into both clouds, no stored credentials:
-- **AWS:** matrix docker build → push to ECR. ECS deploy defined, disabled
-  until infra is provisioned.
-- **Azure:** matrix docker build → push to ACR + offline `bicep build` gate.
-  Container Apps deploy defined, disabled until infra is provisioned.
-
-All processes emit OpenTelemetry traces and metrics (ASP.NET Core, HTTP
-client, Npgsql connection pool, MassTransit) to any OTLP-compatible collector.
-The API exposes `/health` (Postgres + MassTransit bus checks) for load
-balancer health probes, and `/health/detail` with per-dependency JSON
-(status, latency, error) for human/dashboard consumption.
-
-Multi-stage Dockerfiles keep images lean: `aspnet:10.0` for the API and
-both workers (modules transitively reference `Microsoft.AspNetCore.App`).
-A full `docker compose up` starts all nine services locally (Postgres,
-RabbitMQ, acer-stub, api, valuation-worker, reporting-worker, otel-collector,
-prometheus, grafana). Grafana is pre-provisioned at `http://localhost:3000`
-(anonymous viewer, admin/admin) with a `seamline-overview` dashboard: HTTP
-request rate/latency/errors, Npgsql connection pool, MassTransit consumer
-metrics, and .NET runtime (GC, heap, thread pool).
-See [ADR-0025](docs/adr/0025-observability-stack.md).
-
-## Status
-
-**Phases 1–5 complete.**
-
-196 tests (57 Trading unit + 32 Risk unit + 11 Identity unit +
-10 MarketData unit + 57 architecture + 29 integration), all green.
-25 ADRs documenting every architectural decision as it was made.
-One pipeline deploys to both clouds via OIDC — no stored credentials.
-
-### Phase 1 — skeleton and discipline
-
-- Module boundaries: the seven architecture rules above, enforced by 57 tests
-  in CI, plus a coverage gate on `Trade`/`TradeHistory`.
-- A working vertical slice: Reference → Trading → Risk, talking only
-  through Contracts and MassTransit.
-- Credit-limit saga ([ADR-0008](docs/adr/0008-saga-placement-and-ownership.md)):
-  within-limit trades activate immediately; a breach parks the trade for
-  MO-role approval, with timeout and compensating release. Risk owns the
-  credit decision (reservations, exposure), not the trade lifecycle — the
-  saga lives in Trading because its terminal states are trade states.
-- Full trade lifecycle ([ADR-0011](docs/adr/0011-trade-lifecycle-extension.md)):
-  `Draft → Submitted → Active | CreditPending → Active | Rejected`, plus
-  `Cancelled`, `Amended`, `Delivered`.
-- Append-only trade history ([ADR-0006](docs/adr/0006-audit-trail-instead-of-event-sourcing.md))
-  and cross-module audit log ([ADR-0010](docs/adr/0010-audit-module-placement.md)),
-  immutability-guaranteed by PostgreSQL role grants (`SELECT`/`INSERT` only).
-- Multi-tenancy ([ADR-0005](docs/adr/0005-multi-tenancy.md)): EF Core query
-  filter + PostgreSQL Row-Level Security.
-- JWT authentication ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)):
-  Front Office/Middle Office/Back Office roles gate trade booking, credit
-  approval, and invoice reads.
-- MarketData and Settlement first entities
-  ([ADR-0012](docs/adr/0012-marketdata-settlement-first-entities.md)).
-
-### Phase 2 — async processes
-
-- `Valuation.Worker` ([ADR-0014](docs/adr/0014-valuation-worker.md)) —
-  end-of-day MtM on a Hangfire recurring job, volume-weighted cost basis.
-- `Reporting.Worker` ([ADR-0015](docs/adr/0015-reporting-worker.md)) —
-  simplified REMIT submission from `trade_history`, idempotent by
-  presence-of-row, retry/circuit-breaker via
-  `Microsoft.Extensions.Http.Resilience`.
-- Stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)) — flat
-  ±10% and single-commodity ±25% shocks, computed inside the same EOD pass.
-- RabbitMQ transport ([ADR-0017](docs/adr/0017-rabbitmq-transport.md)) —
-  config-driven swap from in-memory; publishers/consumers unchanged.
-- Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) — real free
-  day-ahead sources (ENTSO-E for POWER, EIA for GAS), synthetic default.
-- MtM-based credit exposure — `CreditReservationService` computes exposure
-  from current curve prices via `ICurvePointDirectory`, falling back to
-  notional when no curve exists.
-
-### Phase 3 — deploy
-
-- Multi-stage Dockerfiles, `docker-compose.yml` (9 services).
-- Terraform infrastructure (`infra/aws/`): VPC, RDS, ECS Fargate, ALB, ECR,
-  Secrets Manager, GitHub OIDC provider.
-- GitHub Actions CI/CD: OIDC auth → matrix docker build → push to ECR.
-  ECS deployment step ready, disabled until infra is provisioned.
-- OpenTelemetry tracing/metrics + health checks.
-
-### Phase 5 — Azure portability lane
-
-The domain has no cloud SDK dependency — verified by an architecture test
-([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)) that fails the build
-if any `AWSSDK.*` or `Azure.*` package leaks into a module assembly. The code delta
-between AWS and Azure is one thing: the MassTransit transport branch
-(`InMemory` | `RabbitMq` | `AzureServiceBus`). Everything else — secrets,
-compute, database, telemetry — is abstracted by the platform or identical.
-
-- Transport config seam with three branches
-  ([ADR-0019](docs/adr/0019-cloud-portability-strategy.md),
-  [ADR-0020](docs/adr/0020-azure-service-bus-transport.md)).
-- Portability arch-test — `AWSSDK.*`/`Azure.*` in a module assembly fails
-  the build ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)).
-- `Seamline.Valuation.Function` — Azure Functions isolated worker, Timer
-  trigger, calling the same `RunEndOfDayValuationAsync` as the Hangfire
-  path ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)).
-- `infra/azure/` (Bicep) alongside `infra/aws/` (Terraform) — full resource
-  parity ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)).
-- One GitHub Actions pipeline, OIDC into both clouds, no stored credentials
-  ([ADR-0024](docs/adr/0024-github-actions-federation.md)).
+</details>

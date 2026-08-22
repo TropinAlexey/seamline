@@ -44,8 +44,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     {
         if (string.IsNullOrWhiteSpace(commodityCode))
             throw new ArgumentException("Commodity code is required.", nameof(commodityCode));
-        if (string.IsNullOrWhiteSpace(deliveryPeriod))
-            throw new ArgumentException("Delivery period is required.", nameof(deliveryPeriod));
+        DeliveryPeriodFormat.Validate(deliveryPeriod);
         if (volume <= 0)
             throw new ArgumentOutOfRangeException(nameof(volume), "Volume must be positive.");
         if (price <= 0)

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -17,7 +18,7 @@ public static class TradingEndpoints
     {
         var group = app.MapGroup("/trades").WithTags("Trading");
 
-        group.MapPost("/", async (CreateTradeRequest request, TradingDbContext db, ITenantContext tenant, CancellationToken ct) =>
+        group.MapPost("/", async (CreateTradeRequest request, TradingDbContext db, ITenantContext tenant, ClaimsPrincipal user, CancellationToken ct) =>
         {
             var trade = Trade.CreateDraft(
                 tenant.TenantId,
@@ -48,13 +49,15 @@ public static class TradingEndpoints
             ITenantContext tenant,
             ICreditReservationService creditReservationService,
             IPublishEndpoint publisher,
+            ClaimsPrincipal user,
             CancellationToken ct) =>
         {
             var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
             if (trade is null)
                 return Results.NotFound();
 
-            var submitHistory = trade.Submit("trader", "Submitted for credit check");
+            var actor = ActorName(user);
+            var submitHistory = trade.Submit(actor, "Submitted for credit check");
             db.TradeHistory.Add(submitHistory);
 
             var signedVolume = trade.Direction == TradeDirection.Buy ? trade.Volume : -trade.Volume;
@@ -82,24 +85,31 @@ public static class TradingEndpoints
 
         group.MapPost("/{id:guid}/approve", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
         {
+            var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
+            if (trade is null)
+                return Results.NotFound();
+            if (trade.State != TradeState.CreditPending)
+                return Results.Conflict(new { error = $"Trade {id} must be in CreditPending state to approve, was {trade.State}." });
+
             await publisher.Publish(new TradeApprovalGranted(id), ct);
-            // UseBusOutbox() buffers every Publish pending some DbContext's
-            // SaveChanges in this scope — with no DbContext touched at all,
-            // there's nothing to flush the buffer, and the message is
-            // silently lost when the scope ends. There's no entity write
-            // here, but this call still has to happen.
             await db.SaveChangesAsync(ct);
             return Results.Accepted();
         }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.MiddleOffice));
 
         group.MapPost("/{id:guid}/reject", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
         {
+            var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
+            if (trade is null)
+                return Results.NotFound();
+            if (trade.State != TradeState.CreditPending)
+                return Results.Conflict(new { error = $"Trade {id} must be in CreditPending state to reject, was {trade.State}." });
+
             await publisher.Publish(new TradeApprovalDenied(id), ct);
             await db.SaveChangesAsync(ct);
             return Results.Accepted();
         }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.MiddleOffice));
 
-        group.MapPost("/{id:guid}/cancel", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/cancel", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, ClaimsPrincipal user, CancellationToken ct) =>
         {
             var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
             if (trade is null)
@@ -112,24 +122,24 @@ public static class TradingEndpoints
             if (trade.State == TradeState.CreditPending)
             {
                 await publisher.Publish(new TradeCancelRequested(id), ct);
-                await db.SaveChangesAsync(ct); // flush the outbox — see the comment on /approve
+                await db.SaveChangesAsync(ct);
                 return Results.Accepted();
             }
 
-            var history = trade.Cancel("trader", "Cancelled by trader");
+            var history = trade.Cancel(ActorName(user), "Cancelled by trader");
             db.TradeHistory.Add(history);
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new { trade.Id, trade.State });
         }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.FrontOffice));
 
-        group.MapPost("/{id:guid}/amend", async (Guid id, AmendTradeRequest request, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/amend", async (Guid id, AmendTradeRequest request, TradingDbContext db, IPublishEndpoint publisher, ClaimsPrincipal user, CancellationToken ct) =>
         {
             var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
             if (trade is null)
                 return Results.NotFound();
 
-            var (history, amended) = trade.Amend("trader", request.Reason, request.Volume, request.Price);
+            var (history, amended) = trade.Amend(ActorName(user), request.Reason, request.Volume, request.Price);
             db.TradeHistory.Add(history);
             await publisher.Publish(amended, ct);
             await db.SaveChangesAsync(ct);
@@ -137,13 +147,13 @@ public static class TradingEndpoints
             return Results.Ok(new { trade.Id, trade.State, trade.Volume, trade.Price });
         }).RequireAuthorization(policy => policy.RequireRole(IdentityRoles.FrontOffice));
 
-        group.MapPost("/{id:guid}/deliver", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, CancellationToken ct) =>
+        group.MapPost("/{id:guid}/deliver", async (Guid id, TradingDbContext db, IPublishEndpoint publisher, ClaimsPrincipal user, CancellationToken ct) =>
         {
             var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
             if (trade is null)
                 return Results.NotFound();
 
-            var (history, delivered) = trade.Deliver("trader", "Delivered");
+            var (history, delivered) = trade.Deliver(ActorName(user), "Delivered");
             db.TradeHistory.Add(history);
             await publisher.Publish(delivered, ct);
             await db.SaveChangesAsync(ct);
@@ -153,6 +163,9 @@ public static class TradingEndpoints
 
         return app;
     }
+
+    private static string ActorName(ClaimsPrincipal user)
+        => user.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
 }
 
 internal sealed record CreateTradeRequest(

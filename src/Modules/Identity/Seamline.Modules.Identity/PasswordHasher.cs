@@ -11,6 +11,10 @@ internal static class PasswordHasher
     private const int SaltSize = 16;
     private const int HashSize = 32;
 
+    // Pre-computed hash used to burn CPU time when the login is not found,
+    // so the response latency is indistinguishable from a wrong-password attempt.
+    internal static readonly string DummyHash = Hash("timing-attack-constant-work");
+
     public static string Hash(string password)
     {
         var salt = RandomNumberGenerator.GetBytes(SaltSize);

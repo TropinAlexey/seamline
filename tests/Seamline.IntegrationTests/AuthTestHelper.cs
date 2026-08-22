@@ -16,6 +16,12 @@ internal static class AuthTestHelper
 
     public static async Task<HttpClient> CreateAuthenticatedClientAsync(SeamlineApiFactory factory, Guid tenantId, string role)
     {
+        var (client, _) = await CreateAuthenticatedClientWithLoginAsync(factory, tenantId, role);
+        return client;
+    }
+
+    public static async Task<(HttpClient Client, string Login)> CreateAuthenticatedClientWithLoginAsync(SeamlineApiFactory factory, Guid tenantId, string role)
+    {
         var client = factory.CreateClient();
         var login = $"user-{Guid.NewGuid():N}";
 
@@ -41,7 +47,7 @@ internal static class AuthTestHelper
         var result = await loginResponse.Content.ReadFromJsonAsync<LoginResultDto>();
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", result!.Token);
-        return client;
+        return (client, login);
     }
 
     private sealed record LoginResultDto(string Token);

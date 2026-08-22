@@ -21,13 +21,21 @@ public static class AuthEndpoints
                 tenantContext.SetTenant(new TenantId(request.TenantId));
 
                 var user = await db.Users.FirstOrDefaultAsync(u => u.Login == request.Login, ct);
-                if (user is null || !user.VerifyPassword(request.Password))
+                if (user is null)
+                {
+                    // Burn the same CPU time as a real password check to prevent
+                    // login enumeration via response timing.
+                    PasswordHasher.Verify(request.Password, PasswordHasher.DummyHash);
+                    return Results.Unauthorized();
+                }
+                if (!user.VerifyPassword(request.Password))
                     return Results.Unauthorized();
 
                 var token = JwtTokenFactory.CreateToken(configuration, user);
                 return Results.Ok(new LoginResponse(token));
             })
             .AllowAnonymous()
+            .RequireRateLimiting("login")
             .WithTags("Identity");
 
         return app;

@@ -50,8 +50,7 @@ internal sealed class PriceCurvePoint : TenantOwnedEntity<Guid>
     {
         if (string.IsNullOrWhiteSpace(commodityCode))
             throw new ArgumentException("Commodity code is required.", nameof(commodityCode));
-        if (string.IsNullOrWhiteSpace(deliveryPeriod))
-            throw new ArgumentException("Delivery period is required.", nameof(deliveryPeriod));
+        DeliveryPeriodFormat.Validate(deliveryPeriod);
         if (price <= 0)
             throw new ArgumentOutOfRangeException(nameof(price), "Price must be positive.");
     }

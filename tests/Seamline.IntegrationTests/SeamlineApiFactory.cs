@@ -19,6 +19,7 @@ public sealed class SeamlineApiFactory : WebApplicationFactory<Program>, IAsyncL
     static SeamlineApiFactory()
     {
         Environment.SetEnvironmentVariable("MessageBroker__Transport", "InMemory");
+        Environment.SetEnvironmentVariable("RateLimiting__LoginPermitLimit", "10000");
     }
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine")

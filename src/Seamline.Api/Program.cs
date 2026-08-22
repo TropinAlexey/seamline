@@ -1,9 +1,11 @@
 using System.Text;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Seamline.SharedKernel;
 using Seamline.Modules.Risk.Internal;
@@ -42,6 +44,17 @@ builder.Services.AddOpenTelemetry()
 
 builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!, name: "postgres");
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("login", o =>
+    {
+        o.PermitLimit = builder.Configuration.GetValue("RateLimiting:LoginPermitLimit", 5);
+        o.Window = TimeSpan.FromMinutes(1);
+        o.QueueLimit = 0;
+    });
+});
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -167,6 +180,22 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (ArgumentException ex)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+    }
+});
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 

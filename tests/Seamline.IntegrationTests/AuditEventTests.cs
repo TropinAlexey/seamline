@@ -56,7 +56,7 @@ public sealed class AuditEventTests(SeamlineApiFactory factory) : IClassFixture<
     public async Task Amending_an_active_trade_records_a_TradeAmended_audit_event()
     {
         var tenantId = Guid.NewGuid();
-        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        var (client, login) = await AuthTestHelper.CreateAuthenticatedClientWithLoginAsync(factory, tenantId, IdentityRoles.FrontOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, 1_000_000m);
         var trade = await CreateTradeAsync(client, "GAS", "2027-07", "Sell", 200m, 30m, counterparty.Id);
@@ -70,7 +70,7 @@ public sealed class AuditEventTests(SeamlineApiFactory factory) : IClassFixture<
 
         var row = await PollForAuditEventAsync(tenantId, trade.Id, "TradeAmended");
 
-        Assert.Equal("trader", row.Actor);
+        Assert.Equal(login, row.Actor);
         Assert.Equal("TradeAmended", row.Action);
         Assert.Equal("Trade", row.EntityType);
     }

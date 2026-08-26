@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: seamline-postgres
+  namespace: seamline
+  labels:
+    app: seamline-postgres
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: seamline-postgres

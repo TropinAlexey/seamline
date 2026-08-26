@@ -23,7 +23,7 @@ Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
 forwards in .NET 10 — modular monolith with boundaries enforced in CI,
 two services extracted on purpose, dual-cloud deploy via OIDC.
 
-**All five phases complete.** 196 tests, 25 ADRs, one pipeline to both clouds.
+**All five phases complete.** 196 tests, 26 ADRs, one pipeline to both clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
 > Clean-room implementation. No code, schemas, or business rules from any
@@ -323,6 +323,72 @@ the runtime identity.
 Multi-stage Dockerfiles keep images lean (`aspnet:10.0`). A full
 `docker compose up` starts all nine services locally.
 
+## Local Kubernetes (k3s)
+
+A single-node k3s cluster deploys the entire system via a Helm chart.
+Purpose: force every Kubernetes design question (probes, migration ordering,
+graceful shutdown, PVC lifecycle) that ECS abstracts away. See
+[ADR-0026](docs/adr/0026-local-k3s-deployment.md).
+
+### Prerequisites
+
+- Docker Desktop (builds images)
+- k3s (`curl -sfL https://get.k3s.io | sh -`)
+- kubectl (`export KUBECONFIG=/etc/rancher/k3s/k3s.yaml`)
+- Helm 3
+
+### Quick start
+
+```bash
+./k8s/scripts/bootstrap.sh
+```
+
+Add to `/etc/hosts`: `127.0.0.1 seamline.local grafana.seamline.local jaeger.seamline.local`
+
+### What it deploys
+
+| Workload | Kind | Namespace |
+|---|---|---|
+| `seamline-api` | Deployment + Service + Ingress | `seamline` |
+| `seamline-valuation-worker` | Deployment | `seamline` |
+| `seamline-reporting-worker` | Deployment | `seamline` |
+| `seamline-acer-stub` | Deployment + Service | `seamline` |
+| `postgres` | StatefulSet + PVC | `seamline` |
+| `rabbitmq` | Deployment | `seamline` |
+| `otel-collector` | Deployment + Service | `seamline-observability` |
+| `jaeger` | Deployment + Service + Ingress | `seamline-observability` |
+| `prometheus` | Deployment + Service | `seamline-observability` |
+| `grafana` | Deployment + Service + Ingress | `seamline-observability` |
+| `kube-state-metrics` | Deployment + Service | `seamline-observability` |
+
+### Verify
+
+```bash
+kubectl get pods -n seamline                          # all Ready
+curl http://seamline.local/health                     # 200
+open http://jaeger.seamline.local                     # traces
+open http://grafana.seamline.local                    # metrics (admin/admin)
+```
+
+### Logs
+
+```bash
+kubectl logs -f deployment/seamline-api -n seamline
+kubectl logs -f deployment/seamline-valuation-worker -n seamline
+kubectl logs -f deployment/seamline-reporting-worker -n seamline
+```
+
+### Teardown
+
+```bash
+./k8s/scripts/teardown.sh
+```
+
+### Known limitations
+
+Single node, single replica — no HA, no HPA, no network policies.
+No TLS. Observability data is ephemeral. Not in CI.
+
 ## Security considerations
 
 This is a demo project with deliberate simplifications — stated here
@@ -356,7 +422,7 @@ secrets, compute, database, telemetry — is platform-abstracted or identical,
 enforced by an architecture test that fails the build if any `AWSSDK.*` or
 `Azure.*` package leaks into a module assembly ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)).
 
-<details><summary>ADRs (25 decisions)</summary>
+<details><summary>ADRs (26 decisions)</summary>
 
 | ADR | Topic |
 |---|---|
@@ -385,5 +451,6 @@ enforced by an architecture test that fails the build if any `AWSSDK.*` or
 | [0023](docs/adr/0023-container-apps-and-bicep.md) | Container Apps (not AKS) and Bicep alongside Terraform |
 | [0024](docs/adr/0024-github-actions-federation.md) | GitHub Actions with workload identity federation, not Azure DevOps |
 | [0025](docs/adr/0025-observability-stack.md) | Observability: vanilla OTel SDK + OTLP, ADOT sidecar on AWS, App Insights on Azure |
+| [0026](docs/adr/0026-local-k3s-deployment.md) | Local k3s deployment: Helm chart, probes, migration Job, graceful shutdown |
 
 </details>

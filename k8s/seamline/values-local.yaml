@@ -1,0 +1,3 @@
+# ponytail: identical to defaults — exists as a named file for the
+# "one chart, three values files" interview story. values-aks.yaml
+# and values-aws.yaml would override images + secrets source.

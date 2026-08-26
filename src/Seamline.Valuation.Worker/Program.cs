@@ -1,8 +1,6 @@
 using Hangfire;
 using Hangfire.PostgreSql;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Metrics;
@@ -12,7 +10,7 @@ using Seamline.Modules.Risk.Internal;
 using Seamline.SharedKernel;
 using Seamline.Valuation.Worker;
 
-var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
 {
     Args = args,
     ContentRootPath = AppContext.BaseDirectory
@@ -29,6 +27,9 @@ builder.Services.AddOpenTelemetry()
         .AddRuntimeInstrumentation()
         .AddMeter("Npgsql")
         .AddOtlpExporter());
+
+builder.Services.AddHealthChecks()
+    .AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!, name: "postgres");
 
 builder.Services.AddScoped<TenantContext>();
 builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
@@ -56,10 +57,13 @@ builder.Services.AddHangfire(config => config
         new PostgreSqlStorageOptions { SchemaName = "hangfire_valuation" }));
 builder.Services.AddHangfireServer();
 
-var host = builder.Build();
+var app = builder.Build();
 
-await host.Services.MigrateRiskModuleAsync();
-await host.Services.MigrateMarketDataModuleAsync();
+await app.Services.MigrateRiskModuleAsync();
+await app.Services.MigrateMarketDataModuleAsync();
+
+app.MapHealthChecks("/health/ready").AllowAnonymous();
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 
 // Recurring, instance-independent work — Hangfire, not MassTransit
 // Schedule<> (that's for a timeout owned by one specific saga/process
@@ -71,10 +75,10 @@ await host.Services.MigrateMarketDataModuleAsync();
 // curve-import runs an hour ahead of eod-valuation (ADR-0018) — separate
 // Hangfire recurring jobs instead of one combined job, since two
 // same-time Cron.Daily entries have no guaranteed relative order.
-var jobManager = host.Services.GetRequiredService<IRecurringJobManager>();
+var jobManager = app.Services.GetRequiredService<IRecurringJobManager>();
 jobManager.AddOrUpdate<CurveImportJob>(
     "curve-import", job => job.RunAsync(CancellationToken.None), Cron.Daily(5));
 jobManager.AddOrUpdate<ValuationJob>(
     "eod-valuation", job => job.RunAsync(CancellationToken.None), Cron.Daily(6));
 
-await host.RunAsync();
+await app.RunAsync();

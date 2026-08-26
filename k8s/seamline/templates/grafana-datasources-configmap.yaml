@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: seamline-observability
+  labels:
+    {{- include "seamline.labels" . | nindent 4 }}
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: seamline-prometheus
+        url: http://prometheus:9090
+        access: proxy
+        isDefault: true
+      - name: Jaeger
+        type: jaeger
+        uid: seamline-jaeger
+        url: http://jaeger:16686
+        access: proxy

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seamline-rabbitmq
+  namespace: seamline
+  labels:
+    app: seamline-rabbitmq
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seamline-rabbitmq
+  template:
+    metadata:
+      labels:
+        app: seamline-rabbitmq
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: rabbitmq
+          image: {{ .Values.images.rabbitmq }}
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672
+          resources:
+            requests:
+              memory: "128Mi"  # rabbitmq idle ~80MB; messages are transient so no queue buildup
+              cpu: "100m"      # single-node demo, low throughput
+            limits:
+              memory: "512Mi"  # headroom for management plugin + connection spikes
+              cpu: "500m"      # burst for delayed-message-exchange plugin processing
+          livenessProbe:
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health/checks/alarms
+              port: 15672
+            periodSeconds: 10
+            failureThreshold: 3

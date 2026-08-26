@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seamline-valuation-worker
+  namespace: seamline
+  labels:
+    app: seamline-valuation-worker
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: seamline-valuation-worker
+  template:
+    metadata:
+      labels:
+        app: seamline-valuation-worker
+    spec:
+      terminationGracePeriodSeconds: 35  # .NET 30s ShutdownTimeout + 5s buffer
+      containers:
+        - name: valuation-worker
+          image: {{ .Values.images.valuationWorker }}
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: seamline-config
+            - secretRef:
+                name: seamline-secrets
+          resources:
+            requests:
+              memory: "128Mi"  # Hangfire worker idle ~60MB; jobs are short batch bursts
+              cpu: "100m"      # idle between daily cron triggers
+            limits:
+              memory: "512Mi"  # ceiling for curve-import + eod-valuation concurrent with GC
+              cpu: "500m"      # burst for valuation compute
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8081
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8081
+            periodSeconds: 10
+            failureThreshold: 3

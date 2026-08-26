@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seamline-config
+  namespace: seamline
+  labels:
+    {{- include "seamline.labels" . | nindent 4 }}
+data:
+  MessageBroker__Transport: "RabbitMQ"
+  MessageBroker__RabbitMq__Host: "seamline-rabbitmq"
+  MessageBroker__RabbitMq__VirtualHost: "/"
+  MessageBroker__RabbitMq__Username: "guest"
+  MessageBroker__RabbitMq__Password: "guest"
+  AcerStub__BaseUrl: "http://seamline-acer-stub:8080"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.seamline-observability.svc:4317"

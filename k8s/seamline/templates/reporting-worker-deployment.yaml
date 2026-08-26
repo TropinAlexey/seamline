@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seamline-reporting-worker
+  namespace: seamline
+  labels:
+    app: seamline-reporting-worker
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: seamline-reporting-worker
+  template:
+    metadata:
+      labels:
+        app: seamline-reporting-worker
+    spec:
+      terminationGracePeriodSeconds: 35  # .NET 30s ShutdownTimeout + 5s buffer
+      containers:
+        - name: reporting-worker
+          image: {{ .Values.images.reportingWorker }}
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: seamline-config
+            - secretRef:
+                name: seamline-secrets
+          resources:
+            requests:
+              memory: "128Mi"  # Hangfire worker idle ~60MB; REMIT batch is lightweight
+              cpu: "100m"      # idle between daily cron triggers
+            limits:
+              memory: "512Mi"  # ceiling for reporting batch + HTTP calls to acer-stub
+              cpu: "500m"      # burst for batch processing
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8082
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8082
+            periodSeconds: 10
+            failureThreshold: 3

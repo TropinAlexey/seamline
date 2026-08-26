@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seamline-acer-stub
+  namespace: seamline
+  labels:
+    app: seamline-acer-stub
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seamline-acer-stub
+  template:
+    metadata:
+      labels:
+        app: seamline-acer-stub
+    spec:
+      terminationGracePeriodSeconds: 10  # trivial stub, no state to drain
+      containers:
+        - name: acer-stub
+          image: {{ .Values.images.acerStub }}
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: "64Mi"   # minimal API with zero state; measured ~30MB in docker
+              cpu: "50m"       # near-zero CPU; handles a few POST /reports per day
+            limits:
+              memory: "128Mi"  # double the request — this stub is trivial
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10

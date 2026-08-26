@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seamline-postgres-init
+  namespace: seamline
+  labels:
+    {{- include "seamline.labels" . | nindent 4 }}
+data:
+  01-create-app-role.sql: |
+    CREATE ROLE seamline_app WITH LOGIN PASSWORD 'seamline_app';
+    GRANT CONNECT ON DATABASE seamline TO seamline_app;

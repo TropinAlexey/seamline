@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: seamline-postgres
+  namespace: seamline
+  labels:
+    app: seamline-postgres
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  serviceName: seamline-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seamline-postgres
+  template:
+    metadata:
+      labels:
+        app: seamline-postgres
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: postgres
+          image: {{ .Values.images.postgres }}
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "seamline"
+            - name: POSTGRES_USER
+              value: "seamline"
+            - name: POSTGRES_PASSWORD
+              value: "seamline"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          resources:
+            requests:
+              memory: "128Mi"  # measured: postgres idle ~50MB, 128Mi gives headroom
+              cpu: "100m"      # single-node demo; postgres is mostly idle between queries
+            limits:
+              memory: "512Mi"  # ceiling for query spikes + vacuum
+              cpu: "500m"      # burst for migration DDL
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "seamline"]
+            periodSeconds: 5
+      volumes:
+        - name: init
+          configMap:
+            name: seamline-postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}

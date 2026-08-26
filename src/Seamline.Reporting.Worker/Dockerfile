@@ -16,4 +16,6 @@ RUN dotnet publish src/Seamline.Reporting.Worker/Seamline.Reporting.Worker.cspro
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
+ENV ASPNETCORE_URLS=http://+:8082
+EXPOSE 8082
 ENTRYPOINT ["dotnet", "Seamline.Reporting.Worker.dll"]

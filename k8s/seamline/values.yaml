@@ -1,0 +1,17 @@
+images:
+  api: local/seamline-api:latest
+  valuationWorker: local/seamline-valuation-worker:latest
+  reportingWorker: local/seamline-reporting-worker:latest
+  acerStub: local/seamline-acer-stub:latest
+  rabbitmq: local/seamline-rabbitmq:latest
+  postgres: postgres:17-alpine
+
+replicaCount: 1
+
+ingress:
+  apiHost: seamline.local
+  jaegerHost: jaeger.seamline.local
+  grafanaHost: grafana.seamline.local
+
+postgres:
+  storage: 1Gi

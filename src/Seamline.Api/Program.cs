@@ -174,6 +174,9 @@ await app.Services.MigrateMarketDataModuleAsync();
 await app.Services.MigrateSettlementModuleAsync();
 await app.Services.MigrateIdentityModuleAsync();
 
+if (args.Contains("--migrate-only"))
+    return;
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -220,6 +223,8 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 
 app.MapHealthChecks("/health").AllowAnonymous();
+app.MapHealthChecks("/health/ready").AllowAnonymous();
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 app.MapHealthChecks("/health/detail", new HealthCheckOptions
 {
     ResponseWriter = async (context, report) =>

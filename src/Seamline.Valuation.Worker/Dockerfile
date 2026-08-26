@@ -19,4 +19,6 @@ RUN dotnet publish src/Seamline.Valuation.Worker/Seamline.Valuation.Worker.cspro
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
+ENV ASPNETCORE_URLS=http://+:8081
+EXPOSE 8081
 ENTRYPOINT ["dotnet", "Seamline.Valuation.Worker.dll"]

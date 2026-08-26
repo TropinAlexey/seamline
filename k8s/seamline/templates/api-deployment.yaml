@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seamline-api
+  namespace: seamline
+  labels:
+    app: seamline-api
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: seamline-api
+  template:
+    metadata:
+      labels:
+        app: seamline-api
+    spec:
+      # 5s buffer over .NET Generic Host's 30s ShutdownTimeout —
+      # SIGKILL never fires before the app finishes draining.
+      terminationGracePeriodSeconds: 35
+      containers:
+        - name: api
+          image: {{ .Values.images.api }}
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: seamline-config
+            - secretRef:
+                name: seamline-secrets
+          resources:
+            requests:
+              memory: "256Mi"  # heaviest process: JWT, MassTransit, all 7 modules loaded
+              cpu: "200m"      # steady-state for API serving; measured ~150m under load test
+            limits:
+              memory: "512Mi"  # ceiling for burst (concurrent requests + EF tracking)
+              cpu: "500m"      # burst for startup + heavy request paths
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 30  # 5 min total — covers cold-start + migration wait
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3

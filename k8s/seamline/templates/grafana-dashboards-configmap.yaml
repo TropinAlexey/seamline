@@ -1,0 +1,250 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: seamline-observability
+  labels:
+    {{- include "seamline.labels" . | nindent 4 }}
+data:
+  seamline-overview.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "templating": {
+        "list": [
+          {
+            "name": "service",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+            "definition": "label_values(dotnet_process_memory_working_set_bytes, exported_job)",
+            "query": "label_values(dotnet_process_memory_working_set_bytes, exported_job)",
+            "includeAll": true,
+            "allValue": "seamline-.*",
+            "current": { "text": "All", "value": "$__all" },
+            "multi": true,
+            "refresh": 2
+          }
+        ]
+      },
+      "panels": [
+        {
+          "title": "HTTP Request Rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "sum(rate(http_server_request_duration_seconds_count{exported_job=~\"$service\"}[1m])) by (http_route)", "legendFormat": "{{http_route}}", "refId": "A" }]
+        },
+        {
+          "title": "HTTP Request Latency p95 (ms)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "ms", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{exported_job=~\"$service\"}[5m])) by (le, http_route)) * 1000", "legendFormat": "{{http_route}}", "refId": "A" }]
+        },
+        {
+          "title": "HTTP Error Rate (5xx)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "sum(rate(http_server_request_duration_seconds_count{exported_job=~\"$service\", http_response_status_code=~\"5..\"}[1m])) by (http_route)", "legendFormat": "{{http_route}}", "refId": "A" }]
+        },
+        {
+          "title": "Npgsql Connection Pool",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [
+            { "expr": "sum by (exported_job) (db_client_connection_count{exported_job=~\"$service\"})", "legendFormat": "{{exported_job}} active", "refId": "A" },
+            { "expr": "sum by (exported_job) (db_client_connection_max{exported_job=~\"$service\"})", "legendFormat": "{{exported_job}} max", "refId": "B" }
+          ]
+        },
+        {
+          "title": "MassTransit Message Receive Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "sum(rate(messaging_masstransit_receive_ea_total{exported_job=~\"$service\"}[1m])) by (messaging_masstransit_destination)", "legendFormat": "{{messaging_masstransit_destination}}", "refId": "A" }]
+        },
+        {
+          "title": "MassTransit Consumer Avg Duration (ms)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "ms", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "messaging_masstransit_consume_duration_milliseconds_sum{exported_job=~\"$service\"} / messaging_masstransit_consume_duration_milliseconds_count{exported_job=~\"$service\"}", "legendFormat": "{{messaging_masstransit_destination}}", "refId": "A" }]
+        },
+        {
+          "title": "Working Set (MB)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "decmbytes", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "dotnet_process_memory_working_set_bytes{exported_job=~\"$service\"} / 1048576", "legendFormat": "{{exported_job}}", "refId": "A" }]
+        },
+        {
+          "title": "GC Collections / min",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 6, "x": 6, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "cpm", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "rate(dotnet_gc_collections_total{exported_job=~\"$service\"}[1m]) * 60", "legendFormat": "{{exported_job}} gen{{gc_generation}}", "refId": "A" }]
+        },
+        {
+          "title": "GC Heap Size (MB)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "decmbytes", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "dotnet_gc_last_collection_heap_size_bytes{exported_job=~\"$service\"} / 1048576", "legendFormat": "{{exported_job}} gen{{gc_heap_generation}}", "refId": "A" }]
+        },
+        {
+          "title": "Thread Pool Threads",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "dotnet_thread_pool_thread_count_total{exported_job=~\"$service\"}", "legendFormat": "{{exported_job}}", "refId": "A" }]
+        },
+        {
+          "title": "Exceptions / min",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "cpm", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "sum by (exported_job) (rate(dotnet_exceptions_total{exported_job=~\"$service\"}[1m])) * 60", "legendFormat": "{{exported_job}}", "refId": "A" }]
+        },
+        {
+          "title": "CPU Usage (%)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [{ "expr": "rate(dotnet_process_cpu_time_seconds_total{exported_job=~\"$service\"}[1m]) * 100", "legendFormat": "{{exported_job}} {{cpu_mode}}", "refId": "A" }]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["seamline", "dotnet", "otel"],
+      "time": { "from": "now-30m", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Seamline Overview",
+      "uid": "seamline-overview",
+      "version": 1
+    }
+  k8s-workload-health.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Pod Restarts (seamline namespace)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2, "drawStyle": "bars" } }, "overrides": [] },
+          "targets": [
+            {
+              "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"seamline\"})",
+              "legendFormat": "{{pod}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "OOMKilled Events",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum by (pod) (kube_pod_container_status_last_terminated_reason{namespace=\"seamline\", reason=\"OOMKilled\"})",
+              "legendFormat": "{{pod}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Pod Readiness",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 1, "custom": { "fillOpacity": 20, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [
+            {
+              "expr": "kube_pod_status_ready{namespace=\"seamline\", condition=\"true\"}",
+              "legendFormat": "{{pod}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Container CPU Usage vs Limits",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [
+            {
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"seamline\", container!=\"\"}[1m]))",
+              "legendFormat": "{{pod}} usage",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=\"seamline\", resource=\"cpu\"})",
+              "legendFormat": "{{pod}} limit",
+              "refId": "B"
+            }
+          ]
+        },
+        {
+          "title": "Container Memory Usage vs Limits (MB)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
+          "fieldConfig": { "defaults": { "unit": "decmbytes", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "targets": [
+            {
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"seamline\", container!=\"\"}) / 1048576",
+              "legendFormat": "{{pod}} usage",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=\"seamline\", resource=\"memory\"}) / 1048576",
+              "legendFormat": "{{pod}} limit",
+              "refId": "B"
+            }
+          ]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["seamline", "kubernetes"],
+      "time": { "from": "now-30m", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "K8s Workload Health",
+      "uid": "seamline-k8s-health",
+      "version": 1
+    }

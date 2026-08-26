@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: seamline-observability
+  labels:
+    app: kube-state-metrics
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+    spec:
+      serviceAccountName: kube-state-metrics
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: "32Mi"   # kube-state-metrics on a ~10-pod cluster; measured ~20MB
+              cpu: "10m"       # near-zero CPU; generates metrics from API server watch
+            limits:
+              memory: "128Mi"  # headroom for watch cache on cluster growth
+              cpu: "100m"

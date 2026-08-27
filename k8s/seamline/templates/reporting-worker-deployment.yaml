@@ -20,6 +20,7 @@ spec:
       containers:
         - name: reporting-worker
           image: {{ .Values.images.reportingWorker }}
+          imagePullPolicy: Never
           ports:
             - containerPort: 8082
           envFrom:

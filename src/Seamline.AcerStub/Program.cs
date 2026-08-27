@@ -6,6 +6,8 @@ var app = builder.Build();
 // (ADR-0015) has genuine flakiness to exercise rather than an assertion
 // that it would work. Weighted random outcome on every call, independent
 // of what's actually in the request body.
+app.MapGet("/health/live", () => Results.Ok());
+
 app.MapPost("/reports", async (HttpContext context) =>
 {
     var roll = Random.Shared.NextDouble();

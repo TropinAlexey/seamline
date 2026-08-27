@@ -19,6 +19,7 @@ spec:
       containers:
         - name: migrate
           image: {{ .Values.images.api }}
+          imagePullPolicy: Never
           args: ["--migrate-only"]
           envFrom:
             - configMapRef:

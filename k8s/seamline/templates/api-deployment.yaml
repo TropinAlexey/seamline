@@ -22,6 +22,7 @@ spec:
       containers:
         - name: api
           image: {{ .Values.images.api }}
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           envFrom:

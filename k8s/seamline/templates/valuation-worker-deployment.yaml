@@ -20,6 +20,7 @@ spec:
       containers:
         - name: valuation-worker
           image: {{ .Values.images.valuationWorker }}
+          imagePullPolicy: Never
           ports:
             - containerPort: 8081
           envFrom:

@@ -20,6 +20,7 @@ spec:
       containers:
         - name: acer-stub
           image: {{ .Values.images.acerStub }}
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           resources:
@@ -31,7 +32,7 @@ spec:
               cpu: "100m"
           livenessProbe:
             httpGet:
-              path: /
+              path: /health/live
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10

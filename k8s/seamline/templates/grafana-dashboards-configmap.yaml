@@ -37,7 +37,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "sum(rate(http_server_request_duration_seconds_count{exported_job=~\"$service\"}[1m])) by (http_route)", "legendFormat": "{{http_route}}", "refId": "A" }]
+          "targets": [{ "expr": "sum(rate(http_server_request_duration_seconds_count{exported_job=~\"$service\"}[1m])) by (http_route)", "legendFormat": "{{ "{{" }}http_route{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "HTTP Request Latency p95 (ms)",
@@ -45,7 +45,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "ms", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{exported_job=~\"$service\"}[5m])) by (le, http_route)) * 1000", "legendFormat": "{{http_route}}", "refId": "A" }]
+          "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{exported_job=~\"$service\"}[5m])) by (le, http_route)) * 1000", "legendFormat": "{{ "{{" }}http_route{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "HTTP Error Rate (5xx)",
@@ -53,7 +53,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "sum(rate(http_server_request_duration_seconds_count{exported_job=~\"$service\", http_response_status_code=~\"5..\"}[1m])) by (http_route)", "legendFormat": "{{http_route}}", "refId": "A" }]
+          "targets": [{ "expr": "sum(rate(http_server_request_duration_seconds_count{exported_job=~\"$service\", http_response_status_code=~\"5..\"}[1m])) by (http_route)", "legendFormat": "{{ "{{" }}http_route{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "Npgsql Connection Pool",
@@ -62,8 +62,8 @@ data:
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
           "targets": [
-            { "expr": "sum by (exported_job) (db_client_connection_count{exported_job=~\"$service\"})", "legendFormat": "{{exported_job}} active", "refId": "A" },
-            { "expr": "sum by (exported_job) (db_client_connection_max{exported_job=~\"$service\"})", "legendFormat": "{{exported_job}} max", "refId": "B" }
+            { "expr": "sum by (exported_job) (db_client_connection_count{exported_job=~\"$service\"})", "legendFormat": "{{ "{{" }}exported_job{{ "}}" }} active", "refId": "A" },
+            { "expr": "sum by (exported_job) (db_client_connection_max{exported_job=~\"$service\"})", "legendFormat": "{{ "{{" }}exported_job{{ "}}" }} max", "refId": "B" }
           ]
         },
         {
@@ -72,7 +72,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "sum(rate(messaging_masstransit_receive_ea_total{exported_job=~\"$service\"}[1m])) by (messaging_masstransit_destination)", "legendFormat": "{{messaging_masstransit_destination}}", "refId": "A" }]
+          "targets": [{ "expr": "sum(rate(messaging_masstransit_receive_ea_total{exported_job=~\"$service\"}[1m])) by (messaging_masstransit_destination)", "legendFormat": "{{ "{{" }}messaging_masstransit_destination{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "MassTransit Consumer Avg Duration (ms)",
@@ -80,7 +80,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "ms", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "messaging_masstransit_consume_duration_milliseconds_sum{exported_job=~\"$service\"} / messaging_masstransit_consume_duration_milliseconds_count{exported_job=~\"$service\"}", "legendFormat": "{{messaging_masstransit_destination}}", "refId": "A" }]
+          "targets": [{ "expr": "messaging_masstransit_consume_duration_milliseconds_sum{exported_job=~\"$service\"} / messaging_masstransit_consume_duration_milliseconds_count{exported_job=~\"$service\"}", "legendFormat": "{{ "{{" }}messaging_masstransit_destination{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "Working Set (MB)",
@@ -88,7 +88,7 @@ data:
           "gridPos": { "h": 8, "w": 6, "x": 0, "y": 24 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "decmbytes", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "dotnet_process_memory_working_set_bytes{exported_job=~\"$service\"} / 1048576", "legendFormat": "{{exported_job}}", "refId": "A" }]
+          "targets": [{ "expr": "dotnet_process_memory_working_set_bytes{exported_job=~\"$service\"} / 1048576", "legendFormat": "{{ "{{" }}exported_job{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "GC Collections / min",
@@ -96,7 +96,7 @@ data:
           "gridPos": { "h": 8, "w": 6, "x": 6, "y": 24 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "cpm", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "rate(dotnet_gc_collections_total{exported_job=~\"$service\"}[1m]) * 60", "legendFormat": "{{exported_job}} gen{{gc_generation}}", "refId": "A" }]
+          "targets": [{ "expr": "rate(dotnet_gc_collections_total{exported_job=~\"$service\"}[1m]) * 60", "legendFormat": "{{ "{{" }}exported_job{{ "}}" }} gen{{ "{{" }}gc_generation{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "GC Heap Size (MB)",
@@ -104,7 +104,7 @@ data:
           "gridPos": { "h": 8, "w": 6, "x": 12, "y": 24 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "decmbytes", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "dotnet_gc_last_collection_heap_size_bytes{exported_job=~\"$service\"} / 1048576", "legendFormat": "{{exported_job}} gen{{gc_heap_generation}}", "refId": "A" }]
+          "targets": [{ "expr": "dotnet_gc_last_collection_heap_size_bytes{exported_job=~\"$service\"} / 1048576", "legendFormat": "{{ "{{" }}exported_job{{ "}}" }} gen{{ "{{" }}gc_heap_generation{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "Thread Pool Threads",
@@ -112,7 +112,7 @@ data:
           "gridPos": { "h": 8, "w": 6, "x": 18, "y": 24 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "dotnet_thread_pool_thread_count_total{exported_job=~\"$service\"}", "legendFormat": "{{exported_job}}", "refId": "A" }]
+          "targets": [{ "expr": "dotnet_thread_pool_thread_count_total{exported_job=~\"$service\"}", "legendFormat": "{{ "{{" }}exported_job{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "Exceptions / min",
@@ -120,7 +120,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "cpm", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "sum by (exported_job) (rate(dotnet_exceptions_total{exported_job=~\"$service\"}[1m])) * 60", "legendFormat": "{{exported_job}}", "refId": "A" }]
+          "targets": [{ "expr": "sum by (exported_job) (rate(dotnet_exceptions_total{exported_job=~\"$service\"}[1m])) * 60", "legendFormat": "{{ "{{" }}exported_job{{ "}}" }}", "refId": "A" }]
         },
         {
           "title": "CPU Usage (%)",
@@ -128,7 +128,7 @@ data:
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
           "datasource": { "type": "prometheus", "uid": "seamline-prometheus" },
           "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-          "targets": [{ "expr": "rate(dotnet_process_cpu_time_seconds_total{exported_job=~\"$service\"}[1m]) * 100", "legendFormat": "{{exported_job}} {{cpu_mode}}", "refId": "A" }]
+          "targets": [{ "expr": "rate(dotnet_process_cpu_time_seconds_total{exported_job=~\"$service\"}[1m]) * 100", "legendFormat": "{{ "{{" }}exported_job{{ "}}" }} {{ "{{" }}cpu_mode{{ "}}" }}", "refId": "A" }]
         }
       ],
       "schemaVersion": 39,
@@ -157,7 +157,7 @@ data:
           "targets": [
             {
               "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"seamline\"})",
-              "legendFormat": "{{pod}}",
+              "legendFormat": "{{ "{{" }}pod{{ "}}" }}",
               "refId": "A"
             }
           ]
@@ -181,7 +181,7 @@ data:
           "targets": [
             {
               "expr": "sum by (pod) (kube_pod_container_status_last_terminated_reason{namespace=\"seamline\", reason=\"OOMKilled\"})",
-              "legendFormat": "{{pod}}",
+              "legendFormat": "{{ "{{" }}pod{{ "}}" }}",
               "refId": "A"
             }
           ]
@@ -195,7 +195,7 @@ data:
           "targets": [
             {
               "expr": "kube_pod_status_ready{namespace=\"seamline\", condition=\"true\"}",
-              "legendFormat": "{{pod}}",
+              "legendFormat": "{{ "{{" }}pod{{ "}}" }}",
               "refId": "A"
             }
           ]
@@ -209,12 +209,12 @@ data:
           "targets": [
             {
               "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"seamline\", container!=\"\"}[1m]))",
-              "legendFormat": "{{pod}} usage",
+              "legendFormat": "{{ "{{" }}pod{{ "}}" }} usage",
               "refId": "A"
             },
             {
               "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=\"seamline\", resource=\"cpu\"})",
-              "legendFormat": "{{pod}} limit",
+              "legendFormat": "{{ "{{" }}pod{{ "}}" }} limit",
               "refId": "B"
             }
           ]
@@ -228,12 +228,12 @@ data:
           "targets": [
             {
               "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"seamline\", container!=\"\"}) / 1048576",
-              "legendFormat": "{{pod}} usage",
+              "legendFormat": "{{ "{{" }}pod{{ "}}" }} usage",
               "refId": "A"
             },
             {
               "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=\"seamline\", resource=\"memory\"}) / 1048576",
-              "legendFormat": "{{pod}} limit",
+              "legendFormat": "{{ "{{" }}pod{{ "}}" }} limit",
               "refId": "B"
             }
           ]

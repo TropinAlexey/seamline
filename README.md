@@ -332,10 +332,12 @@ graceful shutdown, PVC lifecycle) that ECS abstracts away. See
 
 ### Prerequisites
 
-- Docker Desktop (builds images)
-- k3s (`curl -sfL https://get.k3s.io | sh -`)
-- kubectl (`export KUBECONFIG=/etc/rancher/k3s/k3s.yaml`)
-- Helm 3
+- Docker Desktop (builds images; required on macOS and Windows, typical on Linux)
+- k3d — runs k3s inside Docker, works on all three platforms:
+  - **macOS:** `brew install k3d`
+  - **Windows:** `choco install k3d` or `winget install k3d` (run bootstrap in WSL or Git Bash)
+  - **Linux:** `curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash`, or native k3s (`curl -sfL https://get.k3s.io | sh -`) + `export KUBECONFIG=/etc/rancher/k3s/k3s.yaml`
+- kubectl, Helm 3
 
 ### Quick start
 
@@ -343,7 +345,8 @@ graceful shutdown, PVC lifecycle) that ECS abstracts away. See
 ./k8s/scripts/bootstrap.sh
 ```
 
-Add to `/etc/hosts`: `127.0.0.1 seamline.local grafana.seamline.local jaeger.seamline.local`
+Add to hosts file: `127.0.0.1 seamline.local grafana.seamline.local jaeger.seamline.local`
+(`/etc/hosts` on macOS/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows)
 
 ### What it deploys
 

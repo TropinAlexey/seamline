@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
+CLUSTER_NAME="seamline"
+
 IMAGES=(
   "local/seamline-api:src/Seamline.Api/Dockerfile"
   "local/seamline-valuation-worker:src/Seamline.Valuation.Worker/Dockerfile"
@@ -13,20 +15,41 @@ IMAGES=(
   "local/seamline-rabbitmq:docker/rabbitmq/Dockerfile"
 )
 
-# --- Prerequisites ---
+# --- Detect runtime: k3d (macOS/Linux) or native k3s (Linux only) ---
+
+if command -v k3d >/dev/null 2>&1; then
+  RUNTIME="k3d"
+elif command -v k3s >/dev/null 2>&1 || [ -f /usr/local/bin/k3s ]; then
+  RUNTIME="k3s"
+else
+  echo "ERROR: neither k3d nor k3s found."
+  echo "  macOS:  brew install k3d"
+  echo "  Linux:  curl -sfL https://get.k3s.io | sh -"
+  exit 1
+fi
 
 for cmd in docker kubectl helm; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "ERROR: $cmd not found. Install it first."; exit 1; }
 done
 
-if ! command -v k3s >/dev/null 2>&1 && [ ! -f /usr/local/bin/k3s ]; then
-  echo "ERROR: k3s not found. Install with:"
-  echo "  curl -sfL https://get.k3s.io | sh -"
-  echo "  export KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
-  exit 1
+echo "Runtime: $RUNTIME"
+
+# --- Ensure cluster exists ---
+
+if [ "$RUNTIME" = "k3d" ]; then
+  if ! k3d cluster list 2>/dev/null | grep -q "$CLUSTER_NAME"; then
+    echo "=== Creating k3d cluster ==="
+    k3d cluster create "$CLUSTER_NAME" \
+      --port "80:80@loadbalancer" \
+      --port "443:443@loadbalancer" \
+      --wait
+  fi
+  kubectl config use-context "k3d-$CLUSTER_NAME"
+else
+  export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 fi
 
-export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+# --- Build images ---
 
 echo "=== Building Docker images ==="
 for entry in "${IMAGES[@]}"; do
@@ -36,12 +59,24 @@ for entry in "${IMAGES[@]}"; do
   docker build -t "$tag" -f "$dockerfile" . --quiet
 done
 
-echo "=== Importing images into k3s containerd ==="
-for entry in "${IMAGES[@]}"; do
-  tag="${entry%%:*}"
-  echo "  → $tag"
-  docker save "$tag" | sudo k3s ctr images import -
-done
+# --- Import images into cluster ---
+
+echo "=== Importing images into cluster ==="
+if [ "$RUNTIME" = "k3d" ]; then
+  image_tags=()
+  for entry in "${IMAGES[@]}"; do
+    image_tags+=("${entry%%:*}")
+  done
+  k3d image import "${image_tags[@]}" -c "$CLUSTER_NAME"
+else
+  for entry in "${IMAGES[@]}"; do
+    tag="${entry%%:*}"
+    echo "  → $tag"
+    docker save "$tag" | sudo k3s ctr images import -
+  done
+fi
+
+# --- Deploy via Helm ---
 
 echo "=== Installing Helm chart ==="
 helm upgrade --install seamline ./k8s/seamline \
@@ -72,8 +107,9 @@ done
 echo ""
 echo "=== Seamline k3s deployment ready ==="
 echo ""
-echo "Add to /etc/hosts (if not already there):"
+echo "Add to hosts file (if not already there):"
 echo "  127.0.0.1 seamline.local grafana.seamline.local jaeger.seamline.local"
+echo "  (macOS/Linux: /etc/hosts  |  Windows: C:\\Windows\\System32\\drivers\\etc\\hosts)"
 echo ""
 echo "URLs:"
 echo "  API:     http://seamline.local"

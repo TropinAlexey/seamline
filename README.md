@@ -26,7 +26,7 @@ forwards in .NET 10 — modular monolith with boundaries enforced in CI,
 two services extracted on purpose, four deploy targets (docker compose,
 local k8s via Helm, AWS ECS via Terraform, Azure Container Apps via Bicep).
 
-**All five phases complete.** 196 tests, 26 ADRs, one pipeline to both clouds.
+**All five phases complete.** 208 tests, 26 ADRs, one pipeline to both clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
 > Clean-room implementation. No code, schemas, or business rules from any
@@ -187,12 +187,12 @@ OpenAPI spec is available at `/openapi/v1.json` in development mode.
 
 ## Testing strategy
 
-196 tests across three layers:
+208 tests across three layers:
 
 | Layer | Count | What it covers |
 |---|---|---|
 | Unit (Trading, Risk, Identity, MarketData) | 110 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions, password hashing, curve import |
-| Architecture | 57 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default |
+| Architecture | 69 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default, MassTransit version pin, no MediatR, explicit rounding, EF Core defaults convention, saga placement |
 | Integration | 29 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery |
 
 **What's deliberately not covered:** no contract tests between modules
@@ -227,7 +227,7 @@ public void Module_implementation_must_not_depend_on_another_modules_implementat
 ```
 _(verbatim from `tests/Seamline.ArchTests/ModuleBoundaryTests.cs`)_
 
-That's one of seven rules enforced on every build:
+That's one of twelve rules enforced on every build:
 
 | Rule | Where it's stated |
 |---|---|
@@ -238,10 +238,16 @@ That's one of seven rules enforced on every build:
 | An implementation assembly exposes nothing public beyond its DI/endpoint composition root | `CLAUDE.md` |
 | No migration adds a foreign key across module schemas | `CLAUDE.md` |
 | No module or `.Contracts` assembly references `AWSSDK.*` or `Azure.*` packages | [ADR-0021](docs/adr/0021-portability-enforced-in-ci.md) |
+| MassTransit pinned to 8.5.10 — no 9.x (commercial license) | [ADR-0009](docs/adr/0009-masstransit-version-pin.md) |
+| No MediatR in any project | `CLAUDE.md` |
+| `Math.Round` always specifies `MidpointRounding` | [ADR-0007](docs/adr/0007-decimal-rounding.md) |
+| `HasDefaultValueSql`/`HasDefaultValue` paired with `ValueGeneratedNever()` | `CLAUDE.md` |
+| Saga types live in owning module's impl assembly, not in Contracts or hosts | [ADR-0008](docs/adr/0008-saga-placement-and-ownership.md) |
 
-The last one runs each migration's `Up()` against a real `MigrationBuilder`
-and inspects the resulting operations — including foreign keys declared
-inline inside `CreateTable`, which don't show up as a top-level operation.
+The cross-schema FK test runs each migration's `Up()` against a real
+`MigrationBuilder` and inspects the resulting operations — including foreign
+keys declared inline inside `CreateTable`, which don't show up as a
+top-level operation.
 
 </details>
 

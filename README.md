@@ -11,6 +11,8 @@ _mini SaaS CTRM demo project_
 ![MassTransit](https://img.shields.io/badge/MassTransit-8.5.10-2C2C2C)
 ![Hangfire](https://img.shields.io/badge/Hangfire-1.8-5E3F71)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)
+![Helm](https://img.shields.io/badge/Helm-0F1689?logo=helm&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-ECS%20%7C%20RDS%20%7C%20ECR-FF9900?logo=amazonwebservices&logoColor=white)
 ![Azure](https://img.shields.io/badge/Azure-Container%20Apps%20%7C%20Service%20Bus-0078D4?logo=microsoftazure&logoColor=white)
@@ -21,7 +23,8 @@ _mini SaaS CTRM demo project_
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
 forwards in .NET 10 — modular monolith with boundaries enforced in CI,
-two services extracted on purpose, dual-cloud deploy via OIDC.
+two services extracted on purpose, four deploy targets (docker compose,
+local k8s via Helm, AWS ECS via Terraform, Azure Container Apps via Bicep).
 
 **All five phases complete.** 196 tests, 26 ADRs, one pipeline to both clouds.
 
@@ -30,6 +33,10 @@ two services extracted on purpose, dual-cloud deploy via OIDC.
 > employer or commercial CTRM product.
 
 ## Running locally
+
+Two options: **docker compose** (below) for quick dev, or **[k3d + Helm](#local-kubernetes-k3s)**
+for a single-node Kubernetes demo (probes, migration Job, observability pipeline —
+not production-ready, see [known limitations](#known-limitations)).
 
 ```bash
 # Full stack (all 9 services):
@@ -302,8 +309,28 @@ dropdown.
 
 ## Deploy
 
-Infrastructure is defined twice, side by side:
+```mermaid
+graph LR
+    SRC["Source code\n+ Dockerfiles"] --> IMG["Docker images\n(5 services)"]
 
+    IMG --> DC["<b>docker compose</b>\nlocal dev\n9 containers"]
+    IMG --> K3D["<b>k3d + Helm</b>\nlocal k8s\n11 workloads"]
+    IMG --> AWS["<b>AWS ECS Fargate</b>\nTerraform\nRDS · ALB · ECR"]
+    IMG --> AZ["<b>Azure Container Apps</b>\nBicep\nFlexible Server · ACR"]
+
+    K3D -. "forces" .-> Q["probes · migration Job\ngraceful shutdown · PVC"]
+
+    style DC fill:#2496ED,color:#fff
+    style K3D fill:#326CE5,color:#fff
+    style AWS fill:#FF9900,color:#fff
+    style AZ fill:#0078D4,color:#fff
+```
+
+Infrastructure is defined three ways — local Kubernetes (Helm), AWS
+(Terraform), and Azure (Bicep):
+
+- **`k8s/seamline/`** (Helm): single-node k3d/k3s cluster, 11 workloads
+  across two namespaces, full observability pipeline. See [Local Kubernetes](#local-kubernetes-k3s).
 - **`infra/aws/`** (Terraform): VPC, RDS PostgreSQL 17.5, ECS Fargate
   (5 services), ALB, ECR, Secrets Manager, GitHub OIDC provider.
 - **`infra/azure/`** (Bicep): PostgreSQL Flexible Server, Container Apps,
@@ -418,6 +445,7 @@ rather than hidden:
 | 3 — deploy (AWS) | Docker, Terraform, CI/CD | Multi-stage Dockerfiles, `docker-compose.yml` (9 services); Terraform VPC/RDS/ECS/ALB/ECR; GitHub Actions OIDC → ECR push |
 | 4 — docs & polish | Architecture diagram, ADR consistency | Mermaid diagram, README structure, ADR style pass |
 | 5 — Azure | Cloud portability lane | Bicep infra ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)); Azure Service Bus transport ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)); Azure Functions Timer trigger ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)); portability arch-test ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)); one pipeline, both clouds ([ADR-0024](docs/adr/0024-github-actions-federation.md)) |
+| — k8s | Local Kubernetes | Helm chart, k3d bootstrap, health probes (liveness/readiness/startup), migration Job, graceful shutdown, OTel Collector → Jaeger pipeline ([ADR-0026](docs/adr/0026-local-k3s-deployment.md)) |
 
 The code delta between AWS and Azure is one thing: the MassTransit transport
 branch (`InMemory` | `RabbitMq` | `AzureServiceBus`). Everything else —

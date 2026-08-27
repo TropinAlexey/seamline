@@ -23,8 +23,9 @@ elif command -v k3s >/dev/null 2>&1 || [ -f /usr/local/bin/k3s ]; then
   RUNTIME="k3s"
 else
   echo "ERROR: neither k3d nor k3s found."
-  echo "  macOS:  brew install k3d"
-  echo "  Linux:  curl -sfL https://get.k3s.io | sh -"
+  echo "  macOS:   brew install k3d"
+  echo "  Windows: choco install k3d  (or winget install k3d)"
+  echo "  Linux:   curl -sfL https://get.k3s.io | sh -"
   exit 1
 fi
 

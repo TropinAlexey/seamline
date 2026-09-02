@@ -28,7 +28,7 @@ forwards in .NET 10 — modular monolith with boundaries enforced in CI,
 two services extracted on purpose, four deploy targets (docker compose,
 local k8s via Helm, AWS ECS via Terraform, Azure Container Apps via Bicep).
 
-**All five phases complete.** 220 tests, 27 ADRs, one pipeline to both clouds.
+**All five phases complete.** 244 tests, 28 ADRs, one pipeline to both clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
 > Clean-room implementation. No code, schemas, or business rules from any
@@ -201,7 +201,7 @@ OpenAPI spec is available at `/openapi/v1.json` in development mode.
 
 ## Testing strategy
 
-220 tests across three layers:
+244 tests across three layers:
 
 | Layer | Count | What it covers |
 |---|---|---|
@@ -505,5 +505,6 @@ enforced by an architecture test that fails the build if any `AWSSDK.*` or
 | [0025](docs/adr/0025-observability-stack.md) | Observability: vanilla OTel SDK + OTLP, ADOT sidecar on AWS, App Insights on Azure |
 | [0026](docs/adr/0026-local-k3s-deployment.md) | Local k3s deployment: Helm chart, probes, migration Job, graceful shutdown |
 | [0027](docs/adr/0027-credit-reservation-concurrency.md) | Credit reservation concurrency: `pg_advisory_xact_lock` per counterparty |
+| [0028](docs/adr/0028-testing-strategy.md) | Testing strategy: what each layer proves and what it deliberately skips |
 
 </details>

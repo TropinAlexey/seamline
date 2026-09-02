@@ -495,6 +495,52 @@ kubectl logs -f deployment/seamline-reporting-worker -n seamline
 ./k8s/scripts/teardown.sh
 ```
 
+### What Kubernetes forced me to change that ECS did not
+
+ECS abstracts away design questions that Kubernetes makes explicit.
+Four things changed in application code or deployment topology:
+
+**1. Three probes instead of one health check.**
+ECS has a single container health check. Kubernetes splits the question
+into liveness (is the process stuck?), readiness (can it serve traffic?),
+and startup (is it still initializing?). The non-obvious decision:
+readiness deliberately excludes RabbitMQ — pulling the API from Service
+endpoints on a broker blip drops *all* HTTP traffic, which is worse than
+occasional 500s on the write path. ECS never forced that tradeoff.
+
+**2. Migration ordering became a first-class lifecycle step.**
+In docker-compose, `depends_on` lets the API container start and self-migrate
+before workers launch. ECS has no equivalent — ordering is implicit.
+Kubernetes has no `depends_on` between Deployments either, but makes it explicit:
+A `Job` now runs the API image with `--migrate-only` before any
+Deployment is applied. Side effect: workers no longer receive migration
+credentials at all — a separation of privilege that was always correct
+but never enforced until k8s made it unavoidable.
+
+**3. Two shutdown clocks, one previously invisible.**
+ECS has a single `stopTimeout`. Kubernetes has `terminationGracePeriodSeconds`
+(platform kill deadline) *and* .NET's `HostOptions.ShutdownTimeout` (app
+drain window). If they're equal, the platform SIGKILLs before the app
+finishes draining. Setting them to 35s/30s is a five-second sentence,
+but *knowing* there are two clocks required reading both the kubelet
+source and the .NET hosting source. Also surfaced: all Dockerfiles must
+use exec-form `ENTRYPOINT ["dotnet", "..."]` so PID 1 is `dotnet`, not
+`/bin/sh` — shell-form silently swallows SIGTERM.
+
+**4. Workers gained Kestrel — and the probe semantics diverge from the API.**
+Workers were console hosts. Kubernetes probes require HTTP, so workers now
+run Kestrel with a single health endpoint and nothing else. The endpoint
+was the trivial part. The decision that mattered was what sits behind it:
+liveness reflects only in-process state (a wedged consumer, a dead scheduler),
+readiness reflects the database alone. Gating liveness on the broker would
+turn a broker blip into a cluster-wide restart storm; gating readiness on
+the broker would stall rolling updates for no benefit, since no Service
+routes to worker pods. That distinction — same probe contract, different
+health semantics — is invisible until you deploy a non-API workload into k8s.
+
+Each finding is backed by a concrete diff. See
+[ADR-0026](docs/adr/0026-local-k3s-deployment.md) for the full analysis.
+
 ### Known limitations
 
 Single node, single replica — no HA, no HPA, no network policies.

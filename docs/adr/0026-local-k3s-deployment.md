@@ -85,6 +85,19 @@ never touch the broker. MassTransit has retry + outbox for transient broker
 failures. Removing the API from Service endpoints on a RabbitMQ blip drops
 all HTTP traffic, which is worse than occasional 500s on the write path.
 
+**Worker probes are deliberate, not inherited from the API.** Workers were
+console hosts. Kubernetes expresses liveness and readiness over HTTP, so
+the workers now run Kestrel with a single health endpoint and nothing else.
+The cost is a web server in a process that serves no traffic; the benefit
+is that health uses the platform's native contract instead of a shell script
+we would have to maintain ourselves. The endpoint was the trivial part. The
+decision that mattered was what sits behind it: liveness reflects only
+in-process liveness — a wedged consumer, a dead scheduler — while readiness
+reflects the database alone. Gating liveness on the broker would turn a
+broker blip into a cluster-wide restart storm; gating readiness on the broker
+would stall rolling updates for no benefit, since no Service routes to these
+pods.
+
 ### Graceful shutdown
 
 **Verified:** all Dockerfiles use exec-form `ENTRYPOINT ["dotnet", "..."]`,

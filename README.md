@@ -28,7 +28,7 @@ forwards in .NET 10 — modular monolith with boundaries enforced in CI,
 two services extracted on purpose, four deploy targets (docker compose,
 local k8s via Helm, AWS ECS via Terraform, Azure Container Apps via Bicep).
 
-**All five phases complete.** 210 tests, 27 ADRs, one pipeline to both clouds.
+**All five phases complete.** 220 tests, 27 ADRs, one pipeline to both clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
 > Clean-room implementation. No code, schemas, or business rules from any
@@ -201,13 +201,13 @@ OpenAPI spec is available at `/openapi/v1.json` in development mode.
 
 ## Testing strategy
 
-210 tests across three layers:
+220 tests across three layers:
 
 | Layer | Count | What it covers |
 |---|---|---|
 | Unit (Trading, Risk, Identity, MarketData) | 110 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions, password hashing, curve import |
 | Architecture | 69 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default, MassTransit version pin, no MediatR, explicit rounding, EF Core defaults convention, saga placement |
-| Integration | 31 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency |
+| Integration | 41 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency, append-only grant enforcement (audit, trade_history, remit_report, invoice), RLS tenant isolation on audit |
 
 **What's deliberately not covered:** no contract tests between modules
 (arch tests enforce the boundary; contracts are DTOs with no logic to test);

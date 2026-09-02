@@ -21,12 +21,14 @@ _mini SaaS CTRM demo project_
 ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
 
+<br clear="left"/>
+
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
 forwards in .NET 10 — modular monolith with boundaries enforced in CI,
 two services extracted on purpose, four deploy targets (docker compose,
 local k8s via Helm, AWS ECS via Terraform, Azure Container Apps via Bicep).
 
-**All five phases complete.** 208 tests, 26 ADRs, one pipeline to both clouds.
+**All five phases complete.** 210 tests, 27 ADRs, one pipeline to both clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
 > Clean-room implementation. No code, schemas, or business rules from any
@@ -73,10 +75,21 @@ for the MO/BO demo users) returns a JWT — every other endpoint requires
 
 Curve import ([ADR-0018](docs/adr/0018-curve-import.md)) uses a synthetic
 price source by default — no configuration needed. To opt a commodity into
-a real source, set `MarketData:CurveImport:Sources:POWER=EntsoE` (with
-`MarketData:CurveImport:EntsoE:ApiToken`, a free ENTSO-E Transparency
-Platform token) or `MarketData:CurveImport:Sources:GAS=Eia` (with
-`MarketData:CurveImport:Eia:ApiKey`, a free EIA Open Data API key).
+a real source, add the keys to `appsettings.json` (or
+`appsettings.Development.json` / environment variables / `dotnet user-secrets`):
+
+```jsonc
+// appsettings.Development.json
+{
+  "MarketData": {
+    "CurveImport": {
+      "Sources": { "POWER": "EntsoE" },   // or "GAS": "Eia"
+      "EntsoE":  { "ApiToken": "<free ENTSO-E Transparency Platform token>" },
+      "Eia":     { "ApiKey":   "<free EIA Open Data API key>" }
+    }
+  }
+}
+```
 
 ## Architecture
 
@@ -121,6 +134,7 @@ graph TB
 - Module boundaries enforced by [57 architecture tests](#testing-strategy) in CI, not by convention.
 - Multi-tenant: shared schema + `tenant_id` global filter + PostgreSQL RLS, tenant claim in JWT.
 - Transactional outbox ([ADR-0004](docs/adr/0004-transactional-outbox.md)): events written in the same DB transaction as business data — no dual-write risk.
+- Credit-limit concurrency: `pg_advisory_xact_lock` per counterparty serializes concurrent trade submissions so two traders cannot silently double-breach a limit ([ADR-0027](docs/adr/0027-credit-reservation-concurrency.md)).
 - Hangfire schedules EOD jobs in both workers, each in its own schema (`hangfire_valuation`, `hangfire_reporting`) — see [ADR-0003](docs/adr/0003-hangfire-vs-masstransit-scheduling.md).
 - CI/CD: one GitHub Actions pipeline deploys to both clouds via OIDC — no stored credentials ([ADR-0024](docs/adr/0024-github-actions-federation.md)).
 
@@ -187,13 +201,13 @@ OpenAPI spec is available at `/openapi/v1.json` in development mode.
 
 ## Testing strategy
 
-208 tests across three layers:
+210 tests across three layers:
 
 | Layer | Count | What it covers |
 |---|---|---|
 | Unit (Trading, Risk, Identity, MarketData) | 110 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions, password hashing, curve import |
 | Architecture | 69 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default, MassTransit version pin, no MediatR, explicit rounding, EF Core defaults convention, saga placement |
-| Integration | 29 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery |
+| Integration | 31 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency |
 
 **What's deliberately not covered:** no contract tests between modules
 (arch tests enforce the boundary; contracts are DTOs with no logic to test);
@@ -294,9 +308,10 @@ parameters are combinable (`--ramp --tenants 10 --concurrency 40`).
 ![Grafana dashboard — staircase load test (18K trades, 3 tenants, 4 phases)](docs/grafana-load-test.png)
 
 Staircase result: throughput saturates at Phase 4 (37 → 13 req/s),
-p95 latency inflects to 5–7s, exceptions spike from pool exhaustion —
-but 5xx errors plateau (graceful degradation, not cascade). All metrics
-return to baseline within seconds after the burst.
+p95 latency inflects to 5–7s. At 50 concurrent clients the connection pool
+exhausts intentionally — the test pushes past saturation to confirm
+graceful degradation: errors plateau (no cascade), and all metrics return
+to baseline within seconds after the burst.
 
 ## Observability
 
@@ -489,5 +504,6 @@ enforced by an architecture test that fails the build if any `AWSSDK.*` or
 | [0024](docs/adr/0024-github-actions-federation.md) | GitHub Actions with workload identity federation, not Azure DevOps |
 | [0025](docs/adr/0025-observability-stack.md) | Observability: vanilla OTel SDK + OTLP, ADOT sidecar on AWS, App Insights on Azure |
 | [0026](docs/adr/0026-local-k3s-deployment.md) | Local k3s deployment: Helm chart, probes, migration Job, graceful shutdown |
+| [0027](docs/adr/0027-credit-reservation-concurrency.md) | Credit reservation concurrency: `pg_advisory_xact_lock` per counterparty |
 
 </details>

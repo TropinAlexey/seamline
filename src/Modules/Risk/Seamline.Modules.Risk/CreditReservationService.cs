@@ -20,34 +20,55 @@ internal sealed class CreditReservationService(
         var counterparty = await counterpartyDirectory.FindAsync(counterpartyId, cancellationToken)
             ?? throw new InvalidOperationException($"Counterparty {counterpartyId} not found.");
 
-        var activeReservations = await db.CreditReservations
-            .Where(r => r.CounterpartyId == counterpartyId &&
-                        (r.Status == CreditReservationStatus.Reserved || r.Status == CreditReservationStatus.Provisional))
-            .ToListAsync(cancellationToken);
+        var useTransaction = db.Database.IsNpgsql();
+        var transaction = useTransaction
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        try
+        {
+            // ponytail: advisory lock serializes credit checks per counterparty —
+            // prevents TOCTOU race where two concurrent submits both pass the limit.
+            // Upgrade to SELECT FOR UPDATE on a ledger row if lock contention shows up in traces.
+            if (useTransaction)
+                await AcquireCounterpartyLockAsync(tenantId, counterpartyId, cancellationToken);
 
-        var existingExposure = 0m;
-        foreach (var r in activeReservations)
-            existingExposure += await ComputeExposureAsync(r.CommodityCode, r.DeliveryPeriod, r.SignedVolume, r.TradePrice, cancellationToken);
+            var activeReservations = await db.CreditReservations
+                .Where(r => r.CounterpartyId == counterpartyId &&
+                            (r.Status == CreditReservationStatus.Reserved || r.Status == CreditReservationStatus.Provisional))
+                .ToListAsync(cancellationToken);
 
-        var newTradeExposure = await ComputeExposureAsync(commodityCode, deliveryPeriod, signedVolume, tradePrice, cancellationToken);
-        var projectedExposure = existingExposure + newTradeExposure;
-        var tenant = new TenantId(tenantId);
+            var existingExposure = 0m;
+            foreach (var r in activeReservations)
+                existingExposure += await ComputeExposureAsync(r.CommodityCode, r.DeliveryPeriod, r.SignedVolume, r.TradePrice, cancellationToken);
 
-        var outcome = projectedExposure <= counterparty.CreditLimit
-            ? CreditReservationOutcome.Reserved
-            : CreditReservationOutcome.Breached;
+            var newTradeExposure = await ComputeExposureAsync(commodityCode, deliveryPeriod, signedVolume, tradePrice, cancellationToken);
+            var projectedExposure = existingExposure + newTradeExposure;
+            var tenant = new TenantId(tenantId);
 
-        var status = outcome == CreditReservationOutcome.Reserved
-            ? CreditReservationStatus.Reserved
-            : CreditReservationStatus.Provisional;
+            var outcome = projectedExposure <= counterparty.CreditLimit
+                ? CreditReservationOutcome.Reserved
+                : CreditReservationOutcome.Breached;
 
-        db.CreditReservations.Add(CreditReservation.Create(
-            tenant, counterpartyId, tradeId,
-            commodityCode, deliveryPeriod, signedVolume, tradePrice,
-            newTradeExposure, status));
-        await db.SaveChangesAsync(cancellationToken);
+            var status = outcome == CreditReservationOutcome.Reserved
+                ? CreditReservationStatus.Reserved
+                : CreditReservationStatus.Provisional;
 
-        return new CreditReservationResult(outcome, existingExposure, counterparty.CreditLimit);
+            db.CreditReservations.Add(CreditReservation.Create(
+                tenant, counterpartyId, tradeId,
+                commodityCode, deliveryPeriod, signedVolume, tradePrice,
+                newTradeExposure, status));
+            await db.SaveChangesAsync(cancellationToken);
+
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
+
+            return new CreditReservationResult(outcome, existingExposure, counterparty.CreditLimit);
+        }
+        finally
+        {
+            if (transaction is not null)
+                await transaction.DisposeAsync();
+        }
     }
 
     public async Task FinalizeAsync(Guid tradeId, CancellationToken cancellationToken = default)
@@ -62,6 +83,15 @@ internal sealed class CreditReservationService(
         var reservation = await RequireReservationAsync(tradeId, cancellationToken);
         reservation.Release();
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    // ponytail: Guid.GetHashCode() is stable within a .NET version but not across major versions.
+    // Fine for transient advisory locks; if stability matters, use first 4 bytes of the GUID instead.
+    private async Task AcquireCounterpartyLockAsync(Guid tenantId, Guid counterpartyId, CancellationToken cancellationToken)
+    {
+        var lockKey = ((long)tenantId.GetHashCode() << 32) | (uint)counterpartyId.GetHashCode();
+        await db.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock({0})", new object[] { lockKey }, cancellationToken);
     }
 
     // ponytail: max(0, MtM) per trade — standard replacement-cost credit exposure.

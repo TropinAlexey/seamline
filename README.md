@@ -91,6 +91,66 @@ a real source, add the keys to `appsettings.json` (or
 }
 ```
 
+## Quick demo: trade lifecycle in 5 requests
+
+Once the stack is running (`docker compose up -d`), paste these into a terminal.
+The flow: login → create counterparty → book a trade → submit it → check MtM position.
+
+```bash
+# 1. Login as front-office trader — grab the JWT
+TOKEN=$(curl -s http://localhost:5000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"tenantId":"11111111-1111-1111-1111-111111111111","login":"trader","password":"Demo-Password-123!"}' \
+  | jq -r '.token')
+```
+
+```bash
+# 2. Create a counterparty with a 500 000 € credit limit
+CP_ID=$(curl -s http://localhost:5000/counterparties/ \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"EnergyTrader GmbH","creditLimit":500000}' \
+  | jq -r '.id')
+
+# → 201  {"id":"<guid>","name":"EnergyTrader GmbH","creditLimit":500000}
+```
+
+```bash
+# 3. Book a power forward: buy 100 MWh for Jan 2027 at 85 €/MWh
+TRADE_ID=$(curl -s http://localhost:5000/trades/ \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"commodityCode\":\"POWER\",\"deliveryPeriod\":\"2027-01\",\"direction\":0,\"volume\":100,\"price\":85,\"counterpartyId\":\"$CP_ID\"}" \
+  | jq -r '.id')
+
+# → 201  {"id":"<guid>"}
+```
+
+```bash
+# 4. Submit the trade — triggers credit check, auto-activates if within limit
+curl -s http://localhost:5000/trades/$TRADE_ID/submit \
+  -X POST -H "Authorization: Bearer $TOKEN" | jq .
+
+# → 200  {"id":"<guid>","state":"Active","outcome":"Reserved"}
+#   (state is "CreditPending" if the notional exceeds the limit —
+#    a MO user would then POST /trades/{id}/approve)
+```
+
+```bash
+# 5. Check positions — the trade is now a live position with mark-to-market
+curl -s http://localhost:5000/positions \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# → 200  [{"commodityCode":"POWER","deliveryPeriod":"2027-01",
+#          "netVolume":100,"markPrice":87.50}]
+#   markPrice comes from the synthetic curve; MtM = (87.50 − 85) × 100 = 250 €
+```
+
+> **What happened behind the scenes:** the `Submit` call reserved credit against
+> the counterparty's limit, activated the trade, and published a `TradeActivated`
+> integration event over MassTransit. The Audit module consumed that event and
+> wrote an append-only `audit_event` row (RLS-protected per tenant). The
+> Valuation Worker's next EOD run will snapshot every position's MtM and compute
+> stress scenarios (±10% flat shock, ±25% commodity-specific shock).
+
 ## Architecture
 
 ```mermaid
@@ -332,14 +392,14 @@ dropdown.
 
 ```mermaid
 graph LR
-    SRC["Source code\n+ Dockerfiles"] --> IMG["Docker images\n(5 services)"]
+    SRC["📦 Source code\n+ Dockerfiles"] --> IMG["🐳 Docker images\n(5 services)"]
 
-    IMG --> DC["<b>docker compose</b>\nlocal dev\n9 containers"]
-    IMG --> K3D["<b>k3d + Helm</b>\nlocal k8s\n11 workloads"]
-    IMG --> AWS["<b>AWS ECS Fargate</b>\nTerraform\nRDS · ALB · ECR"]
-    IMG --> AZ["<b>Azure Container Apps</b>\nBicep\nFlexible Server · ACR"]
+    IMG --> DC["🐳 <b>docker compose</b>\nlocal dev\n9 containers"]
+    IMG --> K3D["☸️ <b>k3d + Helm</b>\nlocal k8s\n11 workloads"]
+    IMG --> AWS["🔶 <b>AWS ECS Fargate</b>\nTerraform\nRDS · ALB · ECR"]
+    IMG --> AZ["🔷 <b>Azure Container Apps</b>\nBicep\nFlexible Server · ACR"]
 
-    K3D -. "forces" .-> Q["probes · migration Job\ngraceful shutdown · PVC"]
+    K3D -. "forces" .-> Q["⚙️ probes · migration Job\ngraceful shutdown · PVC"]
 
     style DC fill:#2496ED,color:#fff
     style K3D fill:#326CE5,color:#fff

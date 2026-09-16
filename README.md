@@ -1,4 +1,6 @@
-<br /><br /><img src="docs/seamline-icon.png" alt="seamline" width="196" align="left" />
+<div style="padding-top: 130px;">
+  <img src="docs/seamline-icon.png" alt="seamline" width="196" align="left" />
+</div>
 
 # Seamline
 _mini SaaS CTRM demo project_

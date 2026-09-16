@@ -24,7 +24,7 @@ _mini SaaS CTRM demo project_
 <br clear="left"/>
 
 Multi-tenant commodity trading & risk platform (mini-CTRM) for power and gas
-forwards in .NET 10 — modular monolith with boundaries enforced in CI,
+forwards on .NET 10 — modular monolith with boundaries enforced in CI,
 two services extracted on purpose, four deploy targets (docker compose,
 local k8s via Helm, AWS ECS via Terraform, Azure Container Apps via Bicep).
 

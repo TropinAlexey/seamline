@@ -102,7 +102,7 @@ builder.Services.AddMassTransit(x =>
     void ConfigurePipeline<TEndpoint>(IBusFactoryConfigurator<TEndpoint> cfg, IBusRegistrationContext context)
         where TEndpoint : IReceiveEndpointConfigurator
     {
-        cfg.UseMessageRetry(r => r.Intervals(100, 250, 500, 1000, 2000));
+        cfg.UseMessageRetry(r => r.Intervals(200, 500, 1000, 2000, 5000));
         cfg.ConfigureEndpoints(context);
     }
 

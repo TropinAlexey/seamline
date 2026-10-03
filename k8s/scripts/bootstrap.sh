@@ -40,13 +40,20 @@ echo "Runtime: $RUNTIME"
 if [ "$RUNTIME" = "k3d" ]; then
   if ! k3d cluster list 2>/dev/null | grep -q "$CLUSTER_NAME"; then
     echo "=== Creating k3d cluster ==="
+    # Bind to loopback only: otherwise the API server and ingress are reachable from the LAN
     k3d cluster create "$CLUSTER_NAME" \
-      --port "80:80@loadbalancer" \
-      --port "443:443@loadbalancer" \
+      --api-port 127.0.0.1:random \
+      --port "127.0.0.1:80:80@loadbalancer" \
+      --port "127.0.0.1:443:443@loadbalancer" \
       --wait
   fi
   kubectl config use-context "k3d-$CLUSTER_NAME"
 else
+  # Native k3s cannot be pinned to loopback from here: --bind-address 127.0.0.1 breaks
+  # in-cluster access to the API (kubernetes Service endpoint), and ServiceLB publishes
+  # ingress on every node interface via DNAT. Restrict 6443/80/443 before NAT instead.
+  echo "WARNING: native k3s exposes the API (6443) and ingress (80/443) on all interfaces."
+  echo "         Restrict them with a firewall that filters before NAT (see README)."
   export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 fi
 

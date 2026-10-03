@@ -28,7 +28,7 @@ forwards on .NET 10 — modular monolith with boundaries enforced in CI,
 two services extracted on purpose, four deploy targets (docker compose,
 local k8s via Helm, AWS ECS via Terraform, Azure Container Apps via Bicep).
 
-**All five phases complete.** 244 tests, 28 ADRs, one pipeline to both clouds.
+**All five phases complete.** 220 tests, 29 ADRs, one pipeline to both clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
 > Clean-room implementation. No code, schemas, or business rules from any
@@ -191,7 +191,7 @@ graph TB
 ```
 
 - Solid arrows = MassTransit integration events (via RabbitMQ). Dotted = in-process query interfaces (DI).
-- Module boundaries enforced by [57 architecture tests](#testing-strategy) in CI, not by convention.
+- Module boundaries enforced by [69 architecture tests](#testing-strategy) in CI, not by convention.
 - Multi-tenant: shared schema + `tenant_id` global filter + PostgreSQL RLS, tenant claim in JWT.
 - Transactional outbox ([ADR-0004](docs/adr/0004-transactional-outbox.md)): events written in the same DB transaction as business data — no dual-write risk.
 - Credit-limit concurrency: `pg_advisory_xact_lock` per counterparty serializes concurrent trade submissions so two traders cannot silently double-breach a limit ([ADR-0027](docs/adr/0027-credit-reservation-concurrency.md)).
@@ -261,7 +261,7 @@ OpenAPI spec is available at `/openapi/v1.json` in development mode.
 
 ## Testing strategy
 
-244 tests across three layers:
+220 tests across three layers:
 
 | Layer | Count | What it covers |
 |---|---|---|
@@ -456,6 +456,17 @@ graceful shutdown, PVC lifecycle) that ECS abstracts away. See
 Add to hosts file: `127.0.0.1 seamline.local grafana.seamline.local jaeger.seamline.local`
 (`/etc/hosts` on macOS/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows)
 
+**Network exposure.** With k3d, the bootstrap script binds the API server
+(random port) and the ingress (80/443) to `127.0.0.1` only, so nothing is
+reachable from the LAN. A cluster created before this change keeps its old
+bindings — recreate it with `k3d cluster delete seamline` and bootstrap
+again. Native k3s listens on all interfaces and cannot simply be bound to
+loopback (`--bind-address 127.0.0.1` breaks in-cluster access to the API).
+Restrict ports 6443, 80 and 443 with a firewall; note that ServiceLB
+forwards 80/443 via DNAT, so a plain `ufw`/`INPUT` rule does not cover
+them — filter before NAT (nftables/iptables prerouting) or at the network
+edge, or prefer k3d on untrusted networks.
+
 ### What it deploys
 
 | Workload | Kind | Namespace |
@@ -580,7 +591,7 @@ secrets, compute, database, telemetry — is platform-abstracted or identical,
 enforced by an architecture test that fails the build if any `AWSSDK.*` or
 `Azure.*` package leaks into a module assembly ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)).
 
-<details><summary>ADRs (26 decisions)</summary>
+<details><summary>ADRs (29 decisions)</summary>
 
 | ADR | Topic |
 |---|---|
@@ -612,5 +623,6 @@ enforced by an architecture test that fails the build if any `AWSSDK.*` or
 | [0026](docs/adr/0026-local-k3s-deployment.md) | Local k3s deployment: Helm chart, probes, migration Job, graceful shutdown |
 | [0027](docs/adr/0027-credit-reservation-concurrency.md) | Credit reservation concurrency: `pg_advisory_xact_lock` per counterparty |
 | [0028](docs/adr/0028-testing-strategy.md) | Testing strategy: what each layer proves and what it deliberately skips |
+| [0029](docs/adr/0029-init-process-pid1.md) | tini as PID 1: unhandled exceptions terminate the container instead of hanging |
 
 </details>

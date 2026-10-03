@@ -164,15 +164,28 @@ builder.Services.AddMassTransit(x =>
 
 var app = builder.Build();
 
-await EnsureAppRoleAsync(app.Configuration);
+try
+{
+    await EnsureAppRoleAsync(app.Configuration, app.Logger);
 
-await app.Services.MigrateReferenceModuleAsync();
-await app.Services.MigrateTradingModuleAsync();
-await app.Services.MigrateRiskModuleAsync();
-await app.Services.MigrateAuditModuleAsync();
-await app.Services.MigrateMarketDataModuleAsync();
-await app.Services.MigrateSettlementModuleAsync();
-await app.Services.MigrateIdentityModuleAsync();
+    await app.Services.MigrateReferenceModuleAsync();
+    await app.Services.MigrateTradingModuleAsync();
+    await app.Services.MigrateRiskModuleAsync();
+    await app.Services.MigrateAuditModuleAsync();
+    await app.Services.MigrateMarketDataModuleAsync();
+    await app.Services.MigrateSettlementModuleAsync();
+    await app.Services.MigrateIdentityModuleAsync();
+}
+catch (Exception ex)
+{
+    // Exit explicitly instead of letting the exception go unhandled: an unhandled
+    // exception aborts via SIGABRT, which hangs the process if it runs as PID 1 without
+    // an init (ADR-0029). This also gives one readable log line and exit code 1.
+    app.Logger.LogCritical(ex, "Database initialization failed");
+    await app.DisposeAsync(); // flushes the console logger
+    Environment.ExitCode = 1;
+    return;
+}
 
 if (args.Contains("--migrate-only"))
     return;
@@ -261,7 +274,7 @@ app.Run();
 // on RDS (or any fresh Postgres) nothing pre-seeds it, but every module
 // migration GRANTs permissions to it — so the role must exist before the
 // first migration runs.
-static async Task EnsureAppRoleAsync(IConfiguration configuration)
+static async Task EnsureAppRoleAsync(IConfiguration configuration, ILogger logger)
 {
     var migratorConn = configuration.GetConnectionString("PostgresMigrator")
         ?? throw new InvalidOperationException("PostgresMigrator connection string is required.");
@@ -274,8 +287,7 @@ static async Task EnsureAppRoleAsync(IConfiguration configuration)
     var appPassword = appConnBuilder.Password ?? "seamline_app";
     var dbName = migratorConnBuilder.Database ?? "seamline";
 
-    await using var conn = new Npgsql.NpgsqlConnection(migratorConn);
-    await conn.OpenAsync();
+    await using var conn = await OpenWithRetryAsync(migratorConn, logger);
 
     await using var cmd = conn.CreateCommand();
     // Values passed as Npgsql parameters, then injected into the DO block
@@ -301,4 +313,34 @@ static async Task EnsureAppRoleAsync(IConfiguration configuration)
     setVars.Parameters.AddWithValue(dbName);
     await setVars.ExecuteNonQueryAsync();
     await cmd.ExecuteNonQueryAsync();
+}
+
+// Postgres may not accept connections yet when the pod/task starts alongside it
+// (fresh k3s cluster, docker compose, RDS failover). Bounded backoff — 2+4+8+16+32 s,
+// about a minute — then give up so the orchestrator's own restart policy takes over.
+static async Task<Npgsql.NpgsqlConnection> OpenWithRetryAsync(string connectionString, ILogger logger)
+{
+    const int maxAttempts = 6;
+    for (var attempt = 1; ; attempt++)
+    {
+        var conn = new Npgsql.NpgsqlConnection(connectionString);
+        try
+        {
+            await conn.OpenAsync();
+            return conn;
+        }
+        catch (Npgsql.NpgsqlException ex) when (ex.IsTransient && attempt < maxAttempts)
+        {
+            await conn.DisposeAsync();
+            var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+            logger.LogWarning("Postgres not reachable (attempt {Attempt}/{MaxAttempts}): {Error}. Retrying in {Delay}",
+                attempt, maxAttempts, ex.Message, delay);
+            await Task.Delay(delay);
+        }
+        catch
+        {
+            await conn.DisposeAsync();
+            throw;
+        }
+    }
 }

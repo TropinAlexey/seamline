@@ -14,8 +14,11 @@ COPY src/ src/
 RUN dotnet publish src/Seamline.Reporting.Worker/Seamline.Reporting.Worker.csproj -c Release -o /app --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+# tini as PID 1 (ADR-0029): the kernel ignores signals without a handler for PID 1,
+# so a bare `dotnet` process cannot abort on an unhandled exception and spins forever.
+RUN apt-get update && apt-get install -y --no-install-recommends tini && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://+:8082
 EXPOSE 8082
-ENTRYPOINT ["dotnet", "Seamline.Reporting.Worker.dll"]
+ENTRYPOINT ["tini", "--", "dotnet", "Seamline.Reporting.Worker.dll"]

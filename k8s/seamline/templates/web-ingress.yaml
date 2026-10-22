@@ -1,0 +1,24 @@
+# Its own host rather than a path on seamline.local: the API host keeps
+# serving bare API routes (curl examples, smoke checks), and the web pod's
+# nginx does the /api prefix-stripping itself — no Traefik middleware CRD.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: seamline-web
+  namespace: seamline
+  labels:
+    app: seamline-web
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: {{ .Values.ingress.webHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: seamline-web
+                port:
+                  number: 8080

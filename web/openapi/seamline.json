@@ -1,0 +1,1628 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Seamline.Api | v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        }
+      }
+    },
+    "/positions": {
+      "get": {
+        "tags": [
+          "Risk"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/valuations/latest": {
+      "get": {
+        "tags": [
+          "Risk"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValuationRunResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stress-results/latest": {
+      "get": {
+        "tags": [
+          "Risk"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StressRunResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/counterparties/{id}/exposure": {
+      "get": {
+        "tags": [
+          "Risk"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CounterpartyExposure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/invoices": {
+      "get": {
+        "tags": [
+          "Settlement"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InvoiceEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit-events": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "parameters": [
+          {
+            "name": "entityId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/counterparties": {
+      "post": {
+        "tags": [
+          "Reference"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCounterpartyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CounterpartyRef"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Reference"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CounterpartyRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/counterparties/{id}": {
+      "get": {
+        "tags": [
+          "Reference"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CounterpartyRef"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/trades": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTradeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeCreatedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/TradeState"
+              }
+            }
+          },
+          {
+            "name": "commodity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trades/{id}": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/trades/{id}/history": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TradeHistoryEntry"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/trades/{id}/remit-reports": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RemitReportEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trades/{id}/submit": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeSubmitResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trades/{id}/approve": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trades/{id}/reject": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trades/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeStateResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trades/{id}/amend": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmendTradeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeAmendResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trades/{id}/deliver": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeStateResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/curve-points": {
+      "post": {
+        "tags": [
+          "MarketData"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCurvePointRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "MarketData"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CurvePointEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AmendTradeRequest": {
+        "required": [
+          "volume",
+          "price",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditEventEntry": {
+        "required": [
+          "id",
+          "occurredAt",
+          "actor",
+          "action",
+          "entityType",
+          "entityId",
+          "context"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "context": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditEventPage": {
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEventEntry"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CounterpartyExposure": {
+        "required": [
+          "counterpartyId",
+          "creditLimit",
+          "currentExposure"
+        ],
+        "type": "object",
+        "properties": {
+          "counterpartyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "creditLimit": {
+            "type": "number",
+            "format": "double"
+          },
+          "currentExposure": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "CounterpartyRef": {
+        "required": [
+          "id",
+          "name",
+          "creditLimit"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "creditLimit": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "CreateCounterpartyRequest": {
+        "required": [
+          "name",
+          "creditLimit"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "creditLimit": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "CreateTradeRequest": {
+        "required": [
+          "commodityCode",
+          "deliveryPeriod",
+          "direction",
+          "volume",
+          "price",
+          "counterpartyId"
+        ],
+        "type": "object",
+        "properties": {
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/TradeDirection"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "counterpartyId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "CreditReservationOutcome": {
+        "enum": [
+          "Reserved",
+          "Breached"
+        ]
+      },
+      "CurvePointEntry": {
+        "required": [
+          "commodityCode",
+          "deliveryPeriod",
+          "price",
+          "publishedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "required": [
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "InvoiceEntry": {
+        "required": [
+          "tradeId",
+          "counterpartyId",
+          "amount",
+          "issuedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "tradeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "counterpartyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LoginRequest": {
+        "required": [
+          "tenantId",
+          "login",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "login": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginResponse": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "PositionRef": {
+        "required": [
+          "commodityCode",
+          "deliveryPeriod",
+          "netVolume",
+          "weightedAvgPrice",
+          "markPrice",
+          "mtmAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "netVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "weightedAvgPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "markPrice": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "mtmAmount": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "PositionsResponse": {
+        "required": [
+          "items",
+          "totalMtm"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PositionRef"
+            }
+          },
+          "totalMtm": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "RemitAction": {
+        "enum": [
+          "New",
+          "Modify",
+          "Terminate"
+        ]
+      },
+      "RemitReportEntry": {
+        "required": [
+          "version",
+          "action",
+          "ackId",
+          "submittedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "action": {
+            "$ref": "#/components/schemas/RemitAction"
+          },
+          "ackId": {
+            "type": "string"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ScenarioType": {
+        "enum": [
+          "FlatShock",
+          "SingleCommodityShock"
+        ]
+      },
+      "SetCurvePointRequest": {
+        "required": [
+          "commodityCode",
+          "deliveryPeriod",
+          "price"
+        ],
+        "type": "object",
+        "properties": {
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "StressEntry": {
+        "required": [
+          "commodityCode",
+          "deliveryPeriod",
+          "netVolume",
+          "shockedPrice",
+          "mtmAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "netVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "shockedPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "mtmAmount": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "StressRunResponse": {
+        "required": [
+          "runId",
+          "runAt",
+          "baseTotalMtm",
+          "scenarios"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "runAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "baseTotalMtm": {
+            "type": "number",
+            "format": "double"
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StressScenarioGroup"
+            }
+          }
+        }
+      },
+      "StressScenarioGroup": {
+        "required": [
+          "scenarioType",
+          "shockPercentage",
+          "items",
+          "totalMtm"
+        ],
+        "type": "object",
+        "properties": {
+          "scenarioType": {
+            "$ref": "#/components/schemas/ScenarioType"
+          },
+          "shockPercentage": {
+            "type": "number",
+            "format": "double"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StressEntry"
+            }
+          },
+          "totalMtm": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "TradeAmendResponse": {
+        "required": [
+          "id",
+          "state",
+          "volume",
+          "price"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TradeState"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "TradeCreatedResponse": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "TradeDirection": {
+        "enum": [
+          "Buy",
+          "Sell"
+        ]
+      },
+      "TradeHistoryEntry": {
+        "required": [
+          "version",
+          "validFrom",
+          "changedBy",
+          "changeReason",
+          "state",
+          "commodityCode",
+          "deliveryPeriod",
+          "direction",
+          "volume",
+          "price",
+          "notional",
+          "counterpartyId"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "changedBy": {
+            "type": "string"
+          },
+          "changeReason": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TradeState"
+          },
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/TradeDirection"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "notional": {
+            "type": "number",
+            "format": "double"
+          },
+          "counterpartyId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "TradePage": {
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TradeSummary"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TradeState": {
+        "enum": [
+          "Draft",
+          "Submitted",
+          "CreditPending",
+          "Active",
+          "Rejected",
+          "Cancelled",
+          "Delivered"
+        ]
+      },
+      "TradeStateResponse": {
+        "required": [
+          "id",
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TradeState"
+          }
+        }
+      },
+      "TradeSubmitResponse": {
+        "required": [
+          "id",
+          "state",
+          "outcome"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TradeState"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/CreditReservationOutcome"
+          }
+        }
+      },
+      "TradeSummary": {
+        "required": [
+          "id",
+          "commodityCode",
+          "deliveryPeriod",
+          "direction",
+          "volume",
+          "price",
+          "notional",
+          "counterpartyId",
+          "state",
+          "version",
+          "lastChangedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/TradeDirection"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "notional": {
+            "type": "number",
+            "format": "double"
+          },
+          "counterpartyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TradeState"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastChangedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ValuationEntry": {
+        "required": [
+          "commodityCode",
+          "deliveryPeriod",
+          "netVolume",
+          "weightedAvgPrice",
+          "curvePrice",
+          "curvePublishedAt",
+          "mtmAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "netVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "weightedAvgPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "curvePrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "curvePublishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mtmAmount": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "ValuationRunResponse": {
+        "required": [
+          "runId",
+          "runAt",
+          "items",
+          "totalMtm"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "runAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValuationEntry"
+            }
+          },
+          "totalMtm": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Identity"
+    },
+    {
+      "name": "Risk"
+    },
+    {
+      "name": "Settlement"
+    },
+    {
+      "name": "Audit"
+    },
+    {
+      "name": "Reference"
+    },
+    {
+      "name": "Trading"
+    },
+    {
+      "name": "MarketData"
+    }
+  ]
+}

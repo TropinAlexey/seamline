@@ -15,6 +15,9 @@ IMAGES=(
   "local/seamline-rabbitmq:docker/rabbitmq/Dockerfile"
 )
 
+# Built from its own context (web/), unlike the .NET images above.
+WEB_IMAGE="local/seamline-web"
+
 # --- Detect runtime: k3d (macOS/Linux) or native k3s (Linux only) ---
 
 if command -v k3d >/dev/null 2>&1; then
@@ -66,6 +69,8 @@ for entry in "${IMAGES[@]}"; do
   echo "  → $tag"
   docker build -t "$tag" -f "$dockerfile" . --quiet
 done
+echo "  → $WEB_IMAGE"
+docker build -t "$WEB_IMAGE" web --quiet
 
 # --- Import images into cluster ---
 
@@ -75,6 +80,7 @@ if [ "$RUNTIME" = "k3d" ]; then
   for entry in "${IMAGES[@]}"; do
     image_tags+=("${entry%%:*}")
   done
+  image_tags+=("$WEB_IMAGE")
   k3d image import "${image_tags[@]}" -c "$CLUSTER_NAME"
 else
   for entry in "${IMAGES[@]}"; do
@@ -82,6 +88,7 @@ else
     echo "  → $tag"
     docker save "$tag" | sudo k3s ctr images import -
   done
+  docker save "$WEB_IMAGE" | sudo k3s ctr images import -
 fi
 
 # --- Deploy via Helm ---
@@ -91,6 +98,14 @@ helm upgrade --install seamline ./k8s/seamline \
   -f ./k8s/seamline/values-local.yaml \
   --namespace seamline --create-namespace \
   --wait --timeout 5m
+
+# Images are tagged :latest with imagePullPolicy: Never, so a re-run rebuilds
+# them under the same tag and Helm sees an unchanged pod spec — nothing would
+# roll. Restart explicitly so the pods pick up the freshly imported images
+# (the API also applies any new migrations on startup). Harmless on a first
+# install.
+kubectl rollout restart deployment -n seamline \
+  seamline-api seamline-valuation-worker seamline-reporting-worker seamline-acer-stub seamline-web
 
 echo "=== Waiting for infrastructure pods ==="
 kubectl wait --for=condition=ready pod -l app=seamline-postgres \
@@ -103,7 +118,7 @@ kubectl wait --for=condition=complete job/seamline-migration \
   -n seamline --timeout=120s
 
 echo "=== Waiting for application rollout ==="
-for deploy in seamline-api seamline-valuation-worker seamline-reporting-worker seamline-acer-stub; do
+for deploy in seamline-api seamline-valuation-worker seamline-reporting-worker seamline-acer-stub seamline-web; do
   kubectl rollout status deployment/"$deploy" -n seamline --timeout=180s
 done
 
@@ -116,10 +131,11 @@ echo ""
 echo "=== Seamline k3s deployment ready ==="
 echo ""
 echo "Add to hosts file (if not already there):"
-echo "  127.0.0.1 seamline.local grafana.seamline.local jaeger.seamline.local"
+echo "  127.0.0.1 seamline.local app.seamline.local grafana.seamline.local jaeger.seamline.local"
 echo "  (macOS/Linux: /etc/hosts  |  Windows: C:\\Windows\\System32\\drivers\\etc\\hosts)"
 echo ""
 echo "URLs:"
+echo "  Web UI:  http://app.seamline.local"
 echo "  API:     http://seamline.local"
 echo "  Grafana: http://grafana.seamline.local  (admin/admin)"
 echo "  Jaeger:  http://jaeger.seamline.local"

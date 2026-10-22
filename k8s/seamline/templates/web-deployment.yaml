@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seamline-web
+  namespace: seamline
+  labels:
+    app: seamline-web
+    {{- include "seamline.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seamline-web
+  template:
+    metadata:
+      labels:
+        app: seamline-web
+    spec:
+      terminationGracePeriodSeconds: 10  # static files + a stateless proxy
+      containers:
+        - name: web
+          image: {{ .Values.images.web }}
+          imagePullPolicy: Never
+          env:
+            # Same-origin (ADR-0030): nginx serves the SPA and proxies /api/*
+            # to the API service with the prefix stripped.
+            - name: API_UPSTREAM
+              value: "seamline-api:8080"
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: "32Mi"   # nginx serving a static bundle
+              cpu: "25m"
+            limits:
+              memory: "64Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 20

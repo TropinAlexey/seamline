@@ -34,3 +34,97 @@ jobs:
       # gate isn't solution-wide yet.
       - name: Coverage gate (Trading domain logic)
         run: dotnet test tests/Seamline.Modules.Trading.Tests/Seamline.Modules.Trading.Tests.csproj --configuration Release --no-build /p:CollectCoverage=true
+
+  # The committed OpenAPI document is the web client's contract (ADR-0030).
+  # Building the API regenerates it; any diff means someone changed an
+  # endpoint without committing the regenerated document.
+  api-contract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Regenerate OpenAPI document
+        run: dotnet build src/Seamline.Api/Seamline.Api.csproj --configuration Release
+
+      - name: Fail if the committed document is stale
+        run: git diff --exit-code -- web/openapi/seamline.json
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      - name: Generated client matches the committed OpenAPI document
+        run: npm run generate:api && git diff --exit-code -- src/api/schema.d.ts
+
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  # Full stack in compose + Playwright. Slow (image builds, saga timing), so
+  # only on pushes to main rather than on every PR update.
+  e2e:
+    if: github.event_name == 'push'
+    needs: [web]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Start the stack
+        run: docker compose up -d --build
+
+      # The API runs its migrations before listening; probe through the web
+      # proxy so both containers are known to be up.
+      - name: Wait for the API behind the proxy
+        run: for i in $(seq 1 90); do curl -fsS http://localhost:8081/api/health && exit 0; sleep 2; done; exit 1
+
+      - name: Seed demo data
+        run: dotnet run tools/seed/seed.cs
+
+      - name: Install Playwright
+        working-directory: web
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: Run E2E
+        working-directory: web
+        run: npm run e2e
+
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color api web | tail -n 300
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report

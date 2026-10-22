@@ -1,0 +1,5 @@
+dist
+openapi
+playwright-report
+test-results
+package-lock.json

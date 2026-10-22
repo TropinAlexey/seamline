@@ -1,0 +1,26 @@
+# Demo-mode settings, applied automatically by `docker compose up` on top of
+# docker-compose.yml. Kept out of the base file so it stays a production-like
+# configuration; delete or rename this file to run without them.
+services:
+  api:
+    environment:
+      # A reviewer switching between six demo accounts, plus the seed tool,
+      # would otherwise hit the production default of 5 logins/min/IP.
+      RateLimiting__LoginPermitLimit: "60"
+
+  # Hangfire dashboards (Development only, ADR-0031): trigger eod-valuation,
+  # curve-import or remit-reporting now instead of at their daily schedule.
+  # Unauthenticated by design, so bound to loopback — not reachable from the LAN.
+  #   http://localhost:8082/hangfire  valuation-worker
+  #   http://localhost:8083/hangfire  reporting-worker
+  valuation-worker:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "127.0.0.1:8082:8081"
+
+  reporting-worker:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "127.0.0.1:8083:8082"

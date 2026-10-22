@@ -13,3 +13,8 @@ data:
   MessageBroker__RabbitMq__Password: "guest"
   AcerStub__BaseUrl: "http://seamline-acer-stub:8080"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.seamline-observability.svc:4317"
+  # Trust X-Forwarded-For from the web pod's nginx and Traefik (k3s pod
+  # network) so the per-IP login limiter sees real clients (ADR-0030).
+  # Two hops: Traefik appends the client, nginx appends Traefik.
+  ReverseProxy__KnownNetworks: "10.42.0.0/16"
+  ReverseProxy__ForwardLimit: "2"

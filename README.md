@@ -41,8 +41,10 @@ for a single-node Kubernetes demo (probes, migration Job, observability pipeline
 not production-ready, see [known limitations](#known-limitations)).
 
 ```bash
-# Full stack (all 9 services):
-docker compose up -d
+# Full stack (all services, including the web UI on :8081):
+docker compose up -d            # after pulling this change on an existing setup: `docker compose down` first —
+                                # the compose network now has a fixed subnet (volumes are kept)
+dotnet run tools/seed/seed.cs   # optional demo data for both tenants, via the API
 
 # Or individual processes against a local Postgres + RabbitMQ:
 docker compose up -d postgres rabbitmq acer-stub
@@ -59,9 +61,12 @@ Once running, these are available on localhost:
 
 | Service | URL | Notes |
 |---|---|---|
+| Web UI | http://localhost:8081 | SPA + same-origin proxy, API under `/api` ([Web UI](#web-ui)) |
 | API | http://localhost:5000 | All endpoints ([see API table](#api)) |
 | Health check | http://localhost:5000/health | 200/503 for load balancers |
 | Health detail | http://localhost:5000/health/detail | Per-check JSON (status, latency) |
+| Hangfire (valuation) | http://localhost:8082/hangfire | Development only — run `eod-valuation` / `curve-import` now |
+| Hangfire (reporting) | http://localhost:8083/hangfire | Development only — run `remit-reporting` now |
 | Grafana | http://localhost:3000 | Anonymous viewer, admin/admin |
 | Prometheus | http://localhost:9090 | Raw metrics query UI |
 | OTel Collector | http://localhost:4317 (gRPC), :4318 (HTTP) | OTLP receiver |
@@ -90,6 +95,68 @@ a real source, add the keys to `appsettings.json` (or
   }
 }
 ```
+
+## Web UI
+
+A thin React client whose only job is to make the backend visible: the
+trade state machine, the four-eyes saga resolving a `202 Accepted`, role
+gating, and tenant isolation ([ADR-0030](docs/adr/0030-web-ui.md)). It
+contains no business logic and does no arithmetic on money or volume —
+every notional and total comes from the server; `web/src/format/` only
+formats.
+
+![Trade detail: state machine with CreditPending lit, approval countdown, four-eyes actions and version history](docs/images/web-ui-trade-detail.png)
+
+![Stress scenarios: total MTM per scenario against the base from the same EOD run](docs/images/web-ui-stress.png)
+
+```bash
+docker compose up -d                 # includes the `web` service
+dotnet run tools/seed/seed.cs        # counterparties, curve points, trades in every state
+open http://localhost:8081
+
+# Frontend development against the composed API:
+cd web && npm ci && npm run dev      # http://localhost:5173, proxies /api → :5000
+npm test && npm run lint             # unit tests (Vitest), lint
+npm run e2e                          # Playwright, against the running compose stack
+```
+
+Demo accounts — password `Demo-Password-123!` for all of them, one-click
+fill on the login page:
+
+| Tenant | Id | Logins |
+|---|---|---|
+| A — Alder Energy | `11111111-1111-1111-1111-111111111111` | `trader` (FO), `risk` (MO), `backoffice` (BO) |
+| B — Birch Power | `22222222-2222-2222-2222-222222222222` | `trader` (FO), `risk` (MO), `backoffice` (BO) |
+
+**Five-minute tour:**
+
+1. Log in as `trader` in tenant A → the blotter. **New trade**: GAS,
+   2031-12 (no curve published that far out, so exposure is the full
+   notional), Buy 4 000 @ 30, counterparty *Pebble Trading* (limit 50 000)
+   → **Create & submit** → *Pending risk approval*.
+2. The trade page shows the state diagram with `CreditPending` lit and a
+   countdown — the saga auto-rejects after 5 minutes.
+3. **Log out**, log in as `risk` (same tenant), open
+   **Approvals**, **Approve**. The API answers `202`; the row shows
+   *Processing via saga…* until the consumer activates the trade. The
+   history entry names `risk` as the approver.
+4. Back as `trader`: **Amend** the active trade (new version, field diff in
+   the history), then **Deliver**.
+5. Log in as `backoffice` → **Invoices**: Settlement issued one from the
+   `TradeDelivered` event.
+6. **Switch tenant** → log in as `trader` in tenant B: a different, smaller
+   blotter. Same logins, disjoint data — the EF Core query filter and
+   PostgreSQL RLS both scope every query by the JWT's tenant.
+7. As `risk`: **Market data** → publish a new price for a month you hold →
+   **Positions & MTM** shows the live MtM move (computed by the API, not the
+   browser). Open http://localhost:8082/hangfire and trigger
+   **eod-valuation**: the **EOD snapshot** tab and **Stress** fill in, both
+   from one run id. **Audit trail** shows every lifecycle event, including
+   who approved.
+
+The OpenAPI document is generated on every API build into
+`web/openapi/seamline.json` and committed; the TypeScript client types are
+generated from it (`npm run generate:api`), and CI fails if either is stale.
 
 ## Quick demo: trade lifecycle in 5 requests
 
@@ -139,9 +206,11 @@ curl -s http://localhost:5000/trades/$TRADE_ID/submit \
 curl -s http://localhost:5000/positions \
   -H "Authorization: Bearer $TOKEN" | jq .
 
-# → 200  [{"commodityCode":"POWER","deliveryPeriod":"2027-01",
-#          "netVolume":100,"markPrice":87.50}]
-#   markPrice comes from the synthetic curve; MtM = (87.50 − 85) × 100 = 250 €
+# → 200  {"items":[{"commodityCode":"POWER","deliveryPeriod":"2027-01",
+#          "netVolume":100,"weightedAvgPrice":85,"markPrice":87.50,"mtmAmount":250}],
+#         "totalMtm":250}
+#   markPrice comes from the curve; MtM = (87.50 − 85) × 100 = 250 €, computed and
+#   rounded server-side (markPrice/mtmAmount are null until a curve point exists)
 ```
 
 > **What happened behind the scenes:** the `Submit` call reserved credit against
@@ -235,45 +304,65 @@ for what each worker computes.
 
 ## API
 
-All endpoints require `Authorization: Bearer <token>` unless noted.
-OpenAPI spec is available at `/openapi/v1.json` in development mode.
+All endpoints require `Authorization: Bearer <token>` unless noted. "Any"
+means any authenticated role. The OpenAPI document is committed at
+[`web/openapi/seamline.json`](web/openapi/seamline.json) and also served at
+`/openapi/v1.json` in development mode. Errors are `{ "error": "..." }`:
+400 for invalid input, 409 when the trade's state does not allow the
+transition.
 
 | Method | Path | Role | Description |
 |---|---|---|---|
-| `POST` | `/auth/login` | anonymous | Returns JWT |
-| `GET` | `/counterparties/` | FO | List counterparties |
-| `POST` | `/counterparties/` | FO | Create counterparty |
-| `GET` | `/trades/` | FO | List trades |
-| `POST` | `/trades/` | FO | Create trade (draft) |
-| `POST` | `/trades/{id}/submit` | FO | Submit draft → credit check |
-| `POST` | `/trades/{id}/approve` | MO | Approve credit-pending trade |
-| `POST` | `/trades/{id}/reject` | MO | Reject credit-pending trade |
+| `POST` | `/auth/login` | anonymous | Returns JWT (rate-limited per client IP) |
+| `GET` | `/counterparties` | any | List counterparties (by name) |
+| `GET` | `/counterparties/{id}` | any | One counterparty |
+| `POST` | `/counterparties` | any | Create counterparty |
+| `GET` | `/trades` | any | Blotter: `?state=&commodity=&period=&page=&pageSize=` → `{ items, total }` |
+| `GET` | `/trades/{id}` | any | Trade with notional, version, last change |
+| `GET` | `/trades/{id}/history` | any | Every version, oldest first |
+| `GET` | `/trades/{id}/remit-reports` | any | Acknowledged REMIT submissions |
+| `POST` | `/trades` | FO | Create trade (draft) |
+| `POST` | `/trades/{id}/submit` | FO | Submit draft → credit check → `Active` or `CreditPending` |
+| `POST` | `/trades/{id}/approve` | MO | Approve credit-pending trade (`202`, applied by the saga) |
+| `POST` | `/trades/{id}/reject` | MO | Reject credit-pending trade (`202`, applied by the saga) |
 | `POST` | `/trades/{id}/amend` | FO | Amend active trade (new version) |
 | `POST` | `/trades/{id}/deliver` | FO | Mark trade as delivered |
-| `POST` | `/trades/{id}/cancel` | FO | Cancel trade |
-| `GET` | `/positions` | FO, MO | MtM positions per commodity × period |
+| `POST` | `/trades/{id}/cancel` | FO | Cancel trade (`202` from `CreditPending`) |
+| `GET` | `/positions` | any | Open positions with live MtM (server-computed) → `{ items, totalMtm }` |
+| `GET` | `/valuations/latest` | any | Latest EOD valuation run → `{ runId, runAt, items, totalMtm }` |
+| `GET` | `/stress-results/latest` | MO, BO | Latest run's stress scenarios with base MtM from the same run |
+| `GET` | `/counterparties/{id}/exposure` | FO, MO | Credit limit and current exposure (same calculation as the credit check) |
 | `GET` | `/invoices` | BO | Settlement invoices |
-| `GET` | `/curve-points/` | FO | List forward curve points |
-| `POST` | `/curve-points/` | FO | Upsert curve point |
-| `GET` | `/stress-scenarios` | MO | Stress scenario results |
+| `GET` | `/audit-events` | MO, BO | Audit trail, newest first: `?entityId=&page=&pageSize=` |
+| `GET` | `/curve-points` | any | Forward curve points |
+| `POST` | `/curve-points` | MO | Upsert curve point |
 | `GET` | `/health` | anonymous | Aggregate health (200/503) |
 | `GET` | `/health/detail` | anonymous | Per-check JSON (status, latency) |
 
 ## Testing strategy
 
-220 tests across three layers:
+243 .NET tests across three layers, plus the web client's own unit and
+end-to-end suites:
 
 | Layer | Count | What it covers |
 |---|---|---|
-| Unit (Trading, Risk, Identity, MarketData) | 110 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions, password hashing, curve import |
+| Unit (Trading, Risk, Identity, MarketData) | 110 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions (including the approver carried through the saga), password hashing, curve import |
 | Architecture | 69 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default, MassTransit version pin, no MediatR, explicit rounding, EF Core defaults convention, saga placement |
-| Integration | 41 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency, append-only grant enforcement (audit, trade_history, remit_report, invoice), RLS tenant isolation on audit |
+| Integration | 64 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency, append-only grants, RLS tenant isolation; blotter/history/exposure/valuation/stress/audit read models, 409 for invalid transitions, role denial (403) per endpoint, per-IP login rate limiting (trusted proxy, unconfigured, two-hop with a forged entry), reservation release on delivery and move on amend, one EOD run id across valuation and stress |
+| Web unit (Vitest) | 28 | JWT decoding, money/date formatting, the allowed-actions table (state × role), history diff, nav role gating |
+| Web E2E (Playwright) | 10 | Against the full compose stack: create/submit within limit, breach → MO approve via the saga, MO reject, amend with diff, deliver → BO invoice, tenant isolation, BO role gating, FO role gating, curve change → live MtM change, deep-link reload |
+
+CI (`.github/workflows/ci.yml`) runs four jobs: `build-and-test` (all .NET
+tests), `api-contract` (fails if the committed OpenAPI document is stale),
+`web` (lint, format, typecheck, unit tests, build, and a check that the
+generated TS client matches the OpenAPI document) and `e2e` (compose +
+seed + Playwright, on pushes to `main`).
 
 **What's deliberately not covered:** no contract tests between modules
 (arch tests enforce the boundary; contracts are DTOs with no logic to test);
-no E2E browser tests (no UI); saga timeout paths are unit-tested with
-MassTransit's test harness, not in integration (the timeout is a
-`Schedule<>` concern, not an HTTP concern).
+saga timeout paths are unit-tested with MassTransit's test harness, not in
+integration or E2E (a 5-minute `Schedule<>` is a time concern, not an HTTP
+one — it was verified once by hand against the compose stack).
 
 <details><summary>Example: what an architecture test looks like</summary>
 
@@ -453,7 +542,7 @@ graceful shutdown, PVC lifecycle) that ECS abstracts away. See
 ./k8s/scripts/bootstrap.sh
 ```
 
-Add to hosts file: `127.0.0.1 seamline.local grafana.seamline.local jaeger.seamline.local`
+Add to hosts file: `127.0.0.1 seamline.local app.seamline.local grafana.seamline.local jaeger.seamline.local` — the web UI is at http://app.seamline.local
 (`/etc/hosts` on macOS/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows)
 
 **Network exposure.** With k3d, the bootstrap script binds the API server
@@ -475,6 +564,7 @@ edge, or prefer k3d on untrusted networks.
 | `seamline-valuation-worker` | Deployment | `seamline` |
 | `seamline-reporting-worker` | Deployment | `seamline` |
 | `seamline-acer-stub` | Deployment + Service | `seamline` |
+| `seamline-web` | Deployment + Service + Ingress (`app.seamline.local`) | `seamline` |
 | `postgres` | StatefulSet + PVC | `seamline` |
 | `rabbitmq` | Deployment | `seamline` |
 | `otel-collector` | Deployment + Service | `seamline-observability` |
@@ -557,6 +647,13 @@ Each finding is backed by a concrete diff. See
 Single node, single replica — no HA, no HPA, no network policies.
 No TLS. Observability data is ephemeral. Not in CI.
 
+Images are tagged `:latest` with `imagePullPolicy: Never`, so a re-run of
+`bootstrap.sh` would leave the pod spec unchanged; the script ends with an
+explicit `kubectl rollout restart` so pods pick up the rebuilt images. If the
+ingress stops answering after `k3d cluster stop`/`start` (connection reset
+from the load balancer), `kubectl port-forward -n seamline svc/seamline-web
+8081:8080` reaches the UI directly.
+
 ## Security considerations
 
 This is a demo project with deliberate simplifications — stated here
@@ -583,6 +680,7 @@ rather than hidden:
 | 3 — deploy (AWS) | Docker, Terraform, CI/CD | Multi-stage Dockerfiles, `docker-compose.yml` (9 services); Terraform VPC/RDS/ECS/ALB/ECR; GitHub Actions OIDC → ECR push |
 | 4 — docs & polish | Architecture diagram, ADR consistency | Mermaid diagram, README structure, ADR style pass |
 | 5 — Azure | Cloud portability lane | Bicep infra ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)); Azure Service Bus transport ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)); Azure Functions Timer trigger ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)); portability arch-test ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)); one pipeline, both clouds ([ADR-0024](docs/adr/0024-github-actions-federation.md)) |
+| 6 — web UI | Making the backend visible | React + Mantine SPA behind a same-origin nginx proxy; OpenAPI as a committed, CI-checked contract; real approver recorded through the saga; 409 for invalid transitions; per-IP login limiting; second demo tenant; Playwright E2E ([ADR-0030](docs/adr/0030-web-ui.md)). Risk/audit read models: EOD run id, live MtM with server totals, exposure shared with the credit check, credit reservations released on delivery and moved on amend, full lifecycle audit, Hangfire dashboard in Development ([ADR-0031](docs/adr/0031-risk-read-models-for-the-ui.md)) |
 | — k8s | Local Kubernetes | Helm chart, k3d bootstrap, health probes (liveness/readiness/startup), migration Job, graceful shutdown, OTel Collector → Jaeger pipeline ([ADR-0026](docs/adr/0026-local-k3s-deployment.md)) |
 
 The code delta between AWS and Azure is one thing: the MassTransit transport
@@ -591,7 +689,7 @@ secrets, compute, database, telemetry — is platform-abstracted or identical,
 enforced by an architecture test that fails the build if any `AWSSDK.*` or
 `Azure.*` package leaks into a module assembly ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)).
 
-<details><summary>ADRs (29 decisions)</summary>
+<details><summary>ADRs (31 decisions)</summary>
 
 | ADR | Topic |
 |---|---|
@@ -624,5 +722,7 @@ enforced by an architecture test that fails the build if any `AWSSDK.*` or
 | [0027](docs/adr/0027-credit-reservation-concurrency.md) | Credit reservation concurrency: `pg_advisory_xact_lock` per counterparty |
 | [0028](docs/adr/0028-testing-strategy.md) | Testing strategy: what each layer proves and what it deliberately skips |
 | [0029](docs/adr/0029-init-process-pid1.md) | tini as PID 1: unhandled exceptions terminate the container instead of hanging |
+| [0030](docs/adr/0030-web-ui.md) | Thin web UI: React, same-origin `/api` proxy, OpenAPI as the committed contract |
+| [0031](docs/adr/0031-risk-read-models-for-the-ui.md) | Risk & audit read models: EOD run id, one exposure calculation, reservations that follow the trade |
 
 </details>

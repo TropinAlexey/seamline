@@ -23,6 +23,7 @@ internal sealed class StressScenarioResult : TenantOwnedEntity<Guid>
     public decimal ShockPercentage { get; private set; }
     public decimal ShockedPrice { get; private set; }
     public decimal MtmAmount { get; private set; }
+    public Guid RunId { get; private set; }
     public DateTimeOffset ValuedAt { get; private set; }
 
     private StressScenarioResult() { }
@@ -35,7 +36,8 @@ internal sealed class StressScenarioResult : TenantOwnedEntity<Guid>
         decimal weightedAvgPrice,
         decimal curvePrice,
         ScenarioType scenarioType,
-        decimal shockPercentage)
+        decimal shockPercentage,
+        EodRun run)
     {
         // ADR-0007: rounding is explicit, named, at the point it happens —
         // never implicit via a column's numeric(18,4) scale. ShockedPrice
@@ -56,7 +58,8 @@ internal sealed class StressScenarioResult : TenantOwnedEntity<Guid>
             ShockPercentage = shockPercentage,
             ShockedPrice = shockedPrice,
             MtmAmount = mtmAmount,
-            ValuedAt = DateTimeOffset.UtcNow
+            RunId = run.RunId,
+            ValuedAt = run.ValuedAt
         };
     }
 }

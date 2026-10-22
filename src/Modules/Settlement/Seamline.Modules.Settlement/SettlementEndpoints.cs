@@ -14,13 +14,17 @@ public static class SettlementEndpoints
         app.MapGet("/invoices", async (SettlementDbContext db, CancellationToken ct) =>
         {
             var invoices = await db.Invoices
-                .Select(i => new { i.TradeId, i.CounterpartyId, i.Amount, i.IssuedAt })
+                .OrderByDescending(i => i.IssuedAt)
+                .Select(i => new InvoiceEntry(i.TradeId, i.CounterpartyId, i.Amount, i.IssuedAt))
                 .ToListAsync(ct);
             return Results.Ok(invoices);
         })
         .WithTags("Settlement")
+        .Produces<List<InvoiceEntry>>()
         .RequireAuthorization(policy => policy.RequireRole(IdentityRoles.BackOffice));
 
         return app;
     }
 }
+
+internal sealed record InvoiceEntry(Guid TradeId, Guid CounterpartyId, decimal Amount, DateTimeOffset IssuedAt);

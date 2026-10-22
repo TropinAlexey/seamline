@@ -68,18 +68,24 @@ internal sealed class TradeApprovalStateMachine : MassTransitStateMachine<TradeA
         During(CreditPending,
             When(TradeApprovalGrantedEvent)
                 .Unschedule(ApprovalTimeout)
-                .Publish(context => new TradeApprovalCompleted(context.Saga.CorrelationId, context.Saga.TenantId, Approved: true))
+                .Publish(context => new TradeApprovalCompleted(
+                    context.Saga.CorrelationId, context.Saga.TenantId, Approved: true,
+                    context.Message.Actor, "Approved after credit limit breach review"))
                 .Finalize(),
             When(TradeApprovalDeniedEvent)
                 .Unschedule(ApprovalTimeout)
-                .Publish(context => new TradeApprovalCompleted(context.Saga.CorrelationId, context.Saga.TenantId, Approved: false))
+                .Publish(context => new TradeApprovalCompleted(
+                    context.Saga.CorrelationId, context.Saga.TenantId, Approved: false,
+                    context.Message.Actor, "Rejected: credit limit breach not approved"))
                 .Finalize(),
             When(ApprovalTimeout.Received)
-                .Publish(context => new TradeApprovalCompleted(context.Saga.CorrelationId, context.Saga.TenantId, Approved: false))
+                .Publish(context => new TradeApprovalCompleted(
+                    context.Saga.CorrelationId, context.Saga.TenantId, Approved: false,
+                    "system", "Rejected: approval timed out after 5 minutes"))
                 .Finalize(),
             When(TradeCancelRequestedEvent)
                 .Unschedule(ApprovalTimeout)
-                .Publish(context => new TradeApprovalCancelled(context.Saga.CorrelationId, context.Saga.TenantId))
+                .Publish(context => new TradeApprovalCancelled(context.Saga.CorrelationId, context.Saga.TenantId, context.Message.Actor))
                 .Finalize());
 
         SetCompletedWhenFinalized();

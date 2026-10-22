@@ -19,6 +19,7 @@ internal sealed class ValuationSnapshot : TenantOwnedEntity<Guid>
     public decimal CurvePrice { get; private set; }
     public DateTimeOffset CurvePublishedAt { get; private set; }
     public decimal MtmAmount { get; private set; }
+    public Guid RunId { get; private set; }
     public DateTimeOffset ValuedAt { get; private set; }
 
     private ValuationSnapshot() { }
@@ -30,7 +31,8 @@ internal sealed class ValuationSnapshot : TenantOwnedEntity<Guid>
         decimal netVolume,
         decimal weightedAvgPrice,
         decimal curvePrice,
-        DateTimeOffset curvePublishedAt)
+        DateTimeOffset curvePublishedAt,
+        EodRun run)
     {
         var mtmAmount = MtmCalculator.Calculate(curvePrice, weightedAvgPrice, netVolume);
 
@@ -45,7 +47,8 @@ internal sealed class ValuationSnapshot : TenantOwnedEntity<Guid>
             CurvePrice = curvePrice,
             CurvePublishedAt = curvePublishedAt,
             MtmAmount = mtmAmount,
-            ValuedAt = DateTimeOffset.UtcNow
+            RunId = run.RunId,
+            ValuedAt = run.ValuedAt
         };
     }
 }

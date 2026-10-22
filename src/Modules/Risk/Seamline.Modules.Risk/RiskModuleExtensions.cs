@@ -17,6 +17,7 @@ public static class RiskModuleExtensions
                     npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", RiskDbContext.Schema))
                 .AddInterceptors(sp.GetRequiredService<TenantSessionVariableInterceptor>()));
 
+        services.AddScoped<CreditExposureCalculator>();
         services.AddScoped<ICreditReservationService, CreditReservationService>();
 
         return services;

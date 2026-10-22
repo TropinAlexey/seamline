@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using MassTransit;
 using Seamline.Modules.Trading.Contracts;
 using Seamline.SharedKernel;
@@ -10,7 +11,7 @@ namespace Seamline.Modules.Risk.Internal;
 // contribution has to be removed at OldPrice and the new one added at
 // NewPrice as two separate Apply calls — a single combined delta can't
 // carry two different prices.
-internal sealed class TradeAmendedConsumer(RiskDbContext db, TenantContext tenantContext) : IConsumer<TradeAmended>
+internal sealed class TradeAmendedConsumer(RiskDbContext db, TenantContext tenantContext, CreditExposureCalculator exposureCalculator) : IConsumer<TradeAmended>
 {
     public async Task Consume(ConsumeContext<TradeAmended> context)
     {
@@ -26,6 +27,17 @@ internal sealed class TradeAmendedConsumer(RiskDbContext db, TenantContext tenan
 
         position.Apply(-oldSignedVolume, message.OldPrice);
         position.Apply(newSignedVolume, message.NewPrice);
+
+        // The reservation follows the amendment, so exposure is measured on
+        // the trade's current terms (ADR-0031).
+        var reservation = await db.CreditReservations.FirstOrDefaultAsync(r => r.TradeId == message.TradeId, context.CancellationToken);
+        if (reservation is not null)
+        {
+            var exposure = await exposureCalculator.ForTradeAsync(
+                message.CommodityCode, message.DeliveryPeriod, newSignedVolume, message.NewPrice, context.CancellationToken);
+            reservation.Amend(newSignedVolume, message.NewPrice, exposure);
+        }
+
         await db.SaveChangesAsync(context.CancellationToken);
     }
 }

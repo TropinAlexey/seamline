@@ -20,6 +20,8 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
     {
         var tenantId = Guid.NewGuid();
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        // POST /curve-points is MO-only (ADR-0030).
+        var marketDataClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
         var trade = await CreateTradeAsync(client, "POWER", "2027-09", "Buy", 100m, 40m, counterparty.Id);
@@ -27,7 +29,7 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
         submitResponse.EnsureSuccessStatusCode();
         await PollForSinglePositionAsync(client);
 
-        var curveResponse = await client.PostAsJsonAsync(
+        var curveResponse = await marketDataClient.PostAsJsonAsync(
             "/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2027-09", price = 46m });
         curveResponse.EnsureSuccessStatusCode();
 
@@ -45,6 +47,8 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
     {
         var tenantId = Guid.NewGuid();
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        // POST /curve-points is MO-only (ADR-0030).
+        var marketDataClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Bravo Trading", 1_000_000m);
         var trade = await CreateTradeAsync(client, "GAS", "2027-10", "Buy", 50m, 20m, counterparty.Id);
@@ -55,7 +59,7 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
         deliverResponse.EnsureSuccessStatusCode();
         await PollForFlatPositionAsync(client, "GAS", "2027-10");
 
-        await client.PostAsJsonAsync("/curve-points/", new { commodityCode = "GAS", deliveryPeriod = "2027-10", price = 25m });
+        await marketDataClient.PostAsJsonAsync("/curve-points/", new { commodityCode = "GAS", deliveryPeriod = "2027-10", price = 25m });
 
         await factory.Services.RunEndOfDayValuationAsync(CancellationToken.None);
 
@@ -90,7 +94,7 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
     {
         for (var attempt = 0; attempt < 40; attempt++)
         {
-            var positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+            var positions = await client.GetPositionsAsync<PositionDto>();
             if (positions is { Count: 1 })
                 return;
             await Task.Delay(250);
@@ -99,16 +103,16 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
         Assert.Fail("No position appeared within the poll window.");
     }
 
-    // Delivering a trade doesn't remove its Position row — GET /positions
-    // returns it with NetVolume back at zero (Risk's own TradeDeliveredConsumer
-    // closes it out, see ADR-0014), not an empty list.
+    // Delivering a trade nets its Position row back to zero (Risk's own
+    // TradeDeliveredConsumer closes it out, see ADR-0014); GET /positions
+    // leaves flat rows out (ADR-0031), so "closed" means the row is gone.
     private static async Task PollForFlatPositionAsync(HttpClient client, string commodityCode, string deliveryPeriod)
     {
         for (var attempt = 0; attempt < 40; attempt++)
         {
-            var positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+            var positions = await client.GetPositionsAsync<PositionDto>();
             var match = positions?.FirstOrDefault(p => p.CommodityCode == commodityCode && p.DeliveryPeriod == deliveryPeriod);
-            if (match is { NetVolume: 0m })
+            if (match is null or { NetVolume: 0m })
                 return;
             await Task.Delay(250);
         }

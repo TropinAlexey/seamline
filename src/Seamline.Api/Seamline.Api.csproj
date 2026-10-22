@@ -6,6 +6,25 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Build-time OpenAPI document (ADR-0030): written to web/openapi and
+       committed, so the web client is generated from a file, not a running
+       API. Skipped inside container builds (the SDK images set
+       DOTNET_RUNNING_IN_CONTAINER) — the image doesn't need it and web/ is
+       not part of its build context. -->
+  <PropertyGroup>
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)/../../web/openapi</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name seamline</OpenApiGenerateDocumentsOptions>
+    <OpenApiGenerateDocuments Condition="'$(DOTNET_RUNNING_IN_CONTAINER)' == 'true'">false</OpenApiGenerateDocuments>
+  </PropertyGroup>
+
+  <!-- The package's target is incremental on this project's own DLL only,
+       but the endpoints live in the module assemblies — a change there
+       would leave the committed document silently stale. Dropping the
+       target's output marker forces regeneration on every build. -->
+  <Target Name="AlwaysRegenerateOpenApiDocument" BeforeTargets="GenerateOpenApiDocuments">
+    <Delete Files="$(BaseIntermediateOutputPath)$(MSBuildProjectName).OpenApiFiles.cache" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="MassTransit" Version="8.5.10" />
     <PackageReference Include="MassTransit.EntityFrameworkCore" Version="8.5.10" />
@@ -13,6 +32,10 @@
     <PackageReference Include="MassTransit.Azure.ServiceBus.Core" Version="8.5.10" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" /> <!-- CVE-2026-49451: override transitive 2.0.0 -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

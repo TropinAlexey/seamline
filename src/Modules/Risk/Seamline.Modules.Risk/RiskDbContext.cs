@@ -68,9 +68,11 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
             builder.Property(v => v.CurvePrice).HasColumnName("curve_price").HasPrecision(18, 4);
             builder.Property(v => v.CurvePublishedAt).HasColumnName("curve_published_at");
             builder.Property(v => v.MtmAmount).HasColumnName("mtm_amount").HasPrecision(18, 2);
+            builder.Property(v => v.RunId).HasColumnName("run_id");
             builder.Property(v => v.ValuedAt).HasColumnName("valued_at");
 
             builder.HasIndex(v => new { v.TenantId, v.CommodityCode, v.DeliveryPeriod, v.ValuedAt });
+            builder.HasIndex(v => new { v.TenantId, v.RunId });
             builder.HasQueryFilter(v => v.TenantId == tenantContext.TenantId);
         });
 
@@ -89,9 +91,11 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
             builder.Property(s => s.ShockPercentage).HasColumnName("shock_percentage").HasPrecision(6, 2);
             builder.Property(s => s.ShockedPrice).HasColumnName("shocked_price").HasPrecision(18, 4);
             builder.Property(s => s.MtmAmount).HasColumnName("mtm_amount").HasPrecision(18, 2);
+            builder.Property(s => s.RunId).HasColumnName("run_id");
             builder.Property(s => s.ValuedAt).HasColumnName("valued_at");
 
             builder.HasIndex(s => new { s.TenantId, s.CommodityCode, s.DeliveryPeriod, s.ValuedAt });
+            builder.HasIndex(s => new { s.TenantId, s.RunId });
             builder.HasQueryFilter(s => s.TenantId == tenantContext.TenantId);
         });
     }

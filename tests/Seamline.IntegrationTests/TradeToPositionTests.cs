@@ -41,7 +41,7 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
 
         var stranger = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);
 
-        var strangerPositions = await stranger.GetFromJsonAsync<List<PositionDto>>("/positions");
+        var strangerPositions = await stranger.GetPositionsAsync<PositionDto>();
 
         Assert.Empty(strangerPositions!);
     }
@@ -61,7 +61,7 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
         Assert.Equal("Breached", submitResult.Outcome);
 
         // No position yet — the trade is parked pending approval, not active.
-        var positionsBeforeApproval = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+        var positionsBeforeApproval = await client.GetPositionsAsync<PositionDto>();
         Assert.Empty(positionsBeforeApproval!);
 
         // Wrong actor: the trader (FO) who booked the trade is not MO.
@@ -107,7 +107,7 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
         List<PositionDto>? positions = null;
         for (var attempt = 0; attempt < 40; attempt++)
         {
-            positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+            positions = await client.GetPositionsAsync<PositionDto>();
             if (positions is { Count: > 0 })
                 break;
             await Task.Delay(250);

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using MassTransit;
 using Seamline.Modules.Trading.Contracts;
 using Seamline.SharedKernel;
@@ -16,12 +17,19 @@ internal sealed class TradeDeliveredConsumer(RiskDbContext db, TenantContext ten
         var message = context.Message;
         tenantContext.SetTenant(new TenantId(message.TenantId));
 
-        var position = await PositionLookup.FindAsync(db, message.CommodityCode, message.DeliveryPeriod, context.CancellationToken);
-        if (position is null)
-            return; // Nothing to close — a delivery with no live position is a data inconsistency elsewhere, not this consumer's problem.
+        // Delivery ends the credit exposure too, not just the position —
+        // without this a delivered trade kept counting against its
+        // counterparty's limit forever (ADR-0031).
+        var reservation = await db.CreditReservations.FirstOrDefaultAsync(r => r.TradeId == message.TradeId, context.CancellationToken);
+        reservation?.Release();
 
-        var signedVolume = message.Direction == TradeDirection.Buy ? message.Volume : -message.Volume;
-        position.Apply(-signedVolume, message.Price);
+        var position = await PositionLookup.FindAsync(db, message.CommodityCode, message.DeliveryPeriod, context.CancellationToken);
+        if (position is not null)
+        {
+            var signedVolume = message.Direction == TradeDirection.Buy ? message.Volume : -message.Volume;
+            position.Apply(-signedVolume, message.Price);
+        }
+        // No position is a data inconsistency elsewhere, not this consumer's problem.
 
         await db.SaveChangesAsync(context.CancellationToken);
     }

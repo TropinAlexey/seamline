@@ -54,6 +54,19 @@ await app.Services.MigrateTradingModuleAsync();
 app.MapHealthChecks("/health/ready").AllowAnonymous();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 
+// Development only: the dashboard lets a demo run a recurring job now
+// instead of at its daily schedule (ADR-0031). No HTTP endpoint on the API
+// reaches into this process — that would couple the extracted worker back
+// to the API (ADR-0002).
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = [new DevelopmentDashboardAuthorizationFilter()],
+        DashboardTitle = "Seamline reporting worker"
+    });
+}
+
 // Recurring, instance-independent work — Hangfire, not MassTransit
 // Schedule<> (ADR-0003). Resolved through DI (IRecurringJobManager) rather
 // than the static RecurringJob API — the static API relies on a global

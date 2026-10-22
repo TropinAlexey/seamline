@@ -21,9 +21,11 @@ public sealed class CurveImportTests(SeamlineApiFactory factory) : IClassFixture
     {
         var tenantId = Guid.NewGuid();
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        // POST /curve-points is MO-only (ADR-0030).
+        var marketDataClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
 
         var currentPeriod = $"{DateTimeOffset.UtcNow:yyyy-MM}";
-        (await client.PostAsJsonAsync("/curve-points/", new { commodityCode = "POWER", deliveryPeriod = currentPeriod, price = 1m }))
+        (await marketDataClient.PostAsJsonAsync("/curve-points/", new { commodityCode = "POWER", deliveryPeriod = currentPeriod, price = 1m }))
             .EnsureSuccessStatusCode();
 
         var provider = BuildCurveImportServiceProvider();
@@ -55,8 +57,10 @@ public sealed class CurveImportTests(SeamlineApiFactory factory) : IClassFixture
     {
         var tenantId = Guid.NewGuid();
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        // POST /curve-points is MO-only (ADR-0030).
+        var marketDataClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
 
-        (await client.PostAsJsonAsync("/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2020-01", price = 99m }))
+        (await marketDataClient.PostAsJsonAsync("/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2020-01", price = 99m }))
             .EnsureSuccessStatusCode();
 
         var provider = BuildCurveImportServiceProvider();

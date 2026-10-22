@@ -50,4 +50,22 @@ internal sealed class CreditReservation : TenantOwnedEntity<Guid>
     public void MarkReserved() => Status = CreditReservationStatus.Reserved;
 
     public void Release() => Status = CreditReservationStatus.Released;
+
+    // An amended trade keeps its reservation but at the new volume/price —
+    // otherwise exposure would keep being measured on terms that no longer
+    // exist. Amend deliberately doesn't re-run the credit check (Trade.Amend),
+    // so this can't be refused; it only keeps the numbers truthful.
+    public void Amend(decimal signedVolume, decimal tradePrice, decimal exposureAmount)
+    {
+        SignedVolume = signedVolume;
+        TradePrice = tradePrice;
+        Amount = exposureAmount;
+    }
+}
+
+internal static class CreditReservationQueries
+{
+    public static IQueryable<CreditReservation> HoldingCredit(this IQueryable<CreditReservation> reservations, Guid counterpartyId) =>
+        reservations.Where(r => r.CounterpartyId == counterpartyId &&
+                                (r.Status == CreditReservationStatus.Reserved || r.Status == CreditReservationStatus.Provisional));
 }

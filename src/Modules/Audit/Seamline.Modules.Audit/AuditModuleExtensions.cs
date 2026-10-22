@@ -38,5 +38,9 @@ public static class AuditModuleExtensions
         configurator.AddConsumer<TradeActivatedAuditConsumer>();
         configurator.AddConsumer<TradeRejectedAuditConsumer>();
         configurator.AddConsumer<TradeAmendedAuditConsumer>();
+        configurator.AddConsumer<TradeCreatedAuditConsumer>();
+        configurator.AddConsumer<TradeSubmittedAuditConsumer>();
+        configurator.AddConsumer<TradeCancelledAuditConsumer>();
+        configurator.AddConsumer<TradeDeliveredAuditConsumer>();
     }
 }

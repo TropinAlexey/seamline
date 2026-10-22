@@ -261,6 +261,10 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("direction");
 
+                    b.Property<DateTimeOffset>("LastChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_changed_at");
+
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -286,6 +290,8 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                         .HasColumnName("volume");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "LastChangedAt");
 
                     b.ToTable("trade", "trading");
                 });

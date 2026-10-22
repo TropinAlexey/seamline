@@ -36,7 +36,10 @@ public static class AuthEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("login")
-            .WithTags("Identity");
+            .WithTags("Identity")
+            .Produces<LoginResponse>()
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status429TooManyRequests);
 
         return app;
     }

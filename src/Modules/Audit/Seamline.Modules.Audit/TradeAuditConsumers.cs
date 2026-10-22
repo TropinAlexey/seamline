@@ -62,3 +62,47 @@ internal sealed class TradeAmendedAuditConsumer(AuditDbContext db, TenantContext
             context.CancellationToken);
     }
 }
+
+internal sealed class TradeCreatedAuditConsumer(AuditDbContext db, TenantContext tenantContext) : IConsumer<TradeCreated>
+{
+    public Task Consume(ConsumeContext<TradeCreated> context)
+    {
+        var message = context.Message;
+        return AuditRecorder.RecordAsync(
+            db, tenantContext, message.TenantId, message.Actor, nameof(TradeCreated), message.TradeId, message.Reason,
+            context.CancellationToken);
+    }
+}
+
+internal sealed class TradeSubmittedAuditConsumer(AuditDbContext db, TenantContext tenantContext) : IConsumer<TradeSubmitted>
+{
+    public Task Consume(ConsumeContext<TradeSubmitted> context)
+    {
+        var message = context.Message;
+        return AuditRecorder.RecordAsync(
+            db, tenantContext, message.TenantId, message.Actor, nameof(TradeSubmitted), message.TradeId, message.Reason,
+            context.CancellationToken);
+    }
+}
+
+internal sealed class TradeCancelledAuditConsumer(AuditDbContext db, TenantContext tenantContext) : IConsumer<TradeCancelled>
+{
+    public Task Consume(ConsumeContext<TradeCancelled> context)
+    {
+        var message = context.Message;
+        return AuditRecorder.RecordAsync(
+            db, tenantContext, message.TenantId, message.Actor, nameof(TradeCancelled), message.TradeId, message.Reason,
+            context.CancellationToken);
+    }
+}
+
+internal sealed class TradeDeliveredAuditConsumer(AuditDbContext db, TenantContext tenantContext) : IConsumer<TradeDelivered>
+{
+    public Task Consume(ConsumeContext<TradeDelivered> context)
+    {
+        var message = context.Message;
+        return AuditRecorder.RecordAsync(
+            db, tenantContext, message.TenantId, message.Actor, nameof(TradeDelivered), message.TradeId, message.Reason,
+            context.CancellationToken);
+    }
+}

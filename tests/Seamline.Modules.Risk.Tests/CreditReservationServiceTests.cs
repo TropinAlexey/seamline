@@ -85,7 +85,7 @@ public class CreditReservationServiceTests
         var service = new CreditReservationService(
             db,
             new FakeCounterpartyDirectory(new CounterpartyRef(CounterpartyId, "Acme Energy", 1_000m)),
-            curveDirectory);
+            new CreditExposureCalculator(curveDirectory));
 
         // Buy 100 @ 45, curve at 50 → MtM = (50-45)*100 = 500 (positive, exposed)
         var result = await service.TryReserveAsync(
@@ -104,7 +104,7 @@ public class CreditReservationServiceTests
         var service = new CreditReservationService(
             db,
             new FakeCounterpartyDirectory(new CounterpartyRef(CounterpartyId, "Acme Energy", 1_000m)),
-            curveDirectory);
+            new CreditExposureCalculator(curveDirectory));
 
         // Buy 100 @ 45, curve at 40 → MtM = (40-45)*100 = -500 → clamped to 0
         var result = await service.TryReserveAsync(
@@ -134,7 +134,7 @@ public class CreditReservationServiceTests
     {
         var db = CreateDbContext();
         var service = new CreditReservationService(
-            db, new FakeCounterpartyDirectory(counterparty: null), new FakeCurvePointDirectory(null));
+            db, new FakeCounterpartyDirectory(counterparty: null), new CreditExposureCalculator(new FakeCurvePointDirectory(null)));
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.TryReserveAsync(
@@ -192,7 +192,7 @@ public class CreditReservationServiceTests
     private static CreditReservationService CreateService(RiskDbContext db, decimal creditLimit) =>
         new(db,
             new FakeCounterpartyDirectory(new CounterpartyRef(CounterpartyId, "Acme Energy", creditLimit)),
-            new FakeCurvePointDirectory(null));
+            new CreditExposureCalculator(new FakeCurvePointDirectory(null)));
 
     private static RiskDbContext CreateDbContext()
     {

@@ -34,7 +34,7 @@ public sealed class AuditEventTests(SeamlineApiFactory factory) : IClassFixture<
     {
         var tenantId = Guid.NewGuid();
         var foClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
-        var moClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
+        var (moClient, riskLogin) = await AuthTestHelper.CreateAuthenticatedClientWithLoginAsync(factory, tenantId, IdentityRoles.MiddleOffice);
 
         var counterparty = await CreateCounterpartyAsync(foClient, 1_000m);
         var trade = await CreateTradeAsync(foClient, "POWER", "2027-06", "Buy", 1_000m, 50m, counterparty.Id);
@@ -47,7 +47,8 @@ public sealed class AuditEventTests(SeamlineApiFactory factory) : IClassFixture<
 
         var row = await PollForAuditEventAsync(tenantId, trade.Id, "TradeRejected");
 
-        Assert.Equal("system", row.Actor);
+        // The MO user who rejected, not "system" — only a timeout is a system decision (ADR-0030).
+        Assert.Equal(riskLogin, row.Actor);
         Assert.Equal("TradeRejected", row.Action);
         Assert.Equal("Trade", row.EntityType);
     }

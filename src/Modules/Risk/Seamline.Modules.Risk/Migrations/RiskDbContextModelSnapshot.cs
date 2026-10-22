@@ -153,6 +153,10 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                         .HasColumnType("numeric(18,3)")
                         .HasColumnName("net_volume");
 
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
                     b.Property<string>("ScenarioType")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -183,6 +187,8 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                         .HasColumnName("weighted_avg_price");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "RunId");
 
                     b.HasIndex("TenantId", "CommodityCode", "DeliveryPeriod", "ValuedAt");
 
@@ -226,6 +232,10 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                         .HasColumnType("numeric(18,3)")
                         .HasColumnName("net_volume");
 
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -240,6 +250,8 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                         .HasColumnName("weighted_avg_price");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "RunId");
 
                     b.HasIndex("TenantId", "CommodityCode", "DeliveryPeriod", "ValuedAt");
 

@@ -5,12 +5,14 @@ namespace Seamline.Modules.Risk.Tests;
 
 public class StressScenarioResultTests
 {
+    private static readonly EodRun Run = EodRun.Start();
+
     [Fact]
     public void Create_shocks_the_curve_price_upward_by_the_given_percentage()
     {
         var result = StressScenarioResult.Create(
             TenantId.New(), "POWER", "2027-03", netVolume: 100m, weightedAvgPrice: 40m,
-            curvePrice: 40m, scenarioType: ScenarioType.FlatShock, shockPercentage: 10m);
+            curvePrice: 40m, scenarioType: ScenarioType.FlatShock, shockPercentage: 10m, Run);
 
         Assert.Equal(44m, result.ShockedPrice); // 40 * 1.10
     }
@@ -20,7 +22,7 @@ public class StressScenarioResultTests
     {
         var result = StressScenarioResult.Create(
             TenantId.New(), "POWER", "2027-03", netVolume: 100m, weightedAvgPrice: 40m,
-            curvePrice: 40m, scenarioType: ScenarioType.FlatShock, shockPercentage: -10m);
+            curvePrice: 40m, scenarioType: ScenarioType.FlatShock, shockPercentage: -10m, Run);
 
         Assert.Equal(36m, result.ShockedPrice); // 40 * 0.90
     }
@@ -30,7 +32,7 @@ public class StressScenarioResultTests
     {
         var result = StressScenarioResult.Create(
             TenantId.New(), "POWER", "2027-03", netVolume: 100m, weightedAvgPrice: 40m,
-            curvePrice: 40m, scenarioType: ScenarioType.SingleCommodityShock, shockPercentage: 25m);
+            curvePrice: 40m, scenarioType: ScenarioType.SingleCommodityShock, shockPercentage: 25m, Run);
 
         // Shocked price = 40 * 1.25 = 50; MtM = (50 - 40) * 100 = 1,000 —
         // same MtmCalculator formula ValuationSnapshot uses, just fed the
@@ -44,7 +46,7 @@ public class StressScenarioResultTests
     {
         var result = StressScenarioResult.Create(
             TenantId.New(), "GAS", "2027-04", netVolume: 50m, weightedAvgPrice: 20m,
-            curvePrice: 20m, scenarioType: ScenarioType.SingleCommodityShock, shockPercentage: -25m);
+            curvePrice: 20m, scenarioType: ScenarioType.SingleCommodityShock, shockPercentage: -25m, Run);
 
         Assert.Equal(ScenarioType.SingleCommodityShock, result.ScenarioType);
         Assert.Equal(-25m, result.ShockPercentage);
@@ -55,7 +57,7 @@ public class StressScenarioResultTests
     {
         var result = StressScenarioResult.Create(
             TenantId.New(), "POWER", "2027-03", netVolume: -100m, weightedAvgPrice: 40m,
-            curvePrice: 40m, scenarioType: ScenarioType.FlatShock, shockPercentage: 10m);
+            curvePrice: 40m, scenarioType: ScenarioType.FlatShock, shockPercentage: 10m, Run);
 
         // Shocked price 44, short 100 units: (44 - 40) * -100 = -400.
         Assert.Equal(-400m, result.MtmAmount);
@@ -75,7 +77,7 @@ public class StressScenarioResultTests
         // up to the even neighbour.
         var result = StressScenarioResult.Create(
             TenantId.New(), "POWER", "2027-03", netVolume: 100m, weightedAvgPrice: 30m,
-            curvePrice: 33.335m, scenarioType: ScenarioType.FlatShock, shockPercentage: 1m);
+            curvePrice: 33.335m, scenarioType: ScenarioType.FlatShock, shockPercentage: 1m, Run);
 
         Assert.Equal(33.6684m, result.ShockedPrice);
     }

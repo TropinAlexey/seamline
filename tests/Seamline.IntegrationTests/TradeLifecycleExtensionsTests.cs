@@ -29,7 +29,7 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
         var cancelled = await PollForTradeStateAsync(client, trade.Id, "Cancelled");
         Assert.Equal("Cancelled", cancelled.State);
 
-        var positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+        var positions = await client.GetPositionsAsync<PositionDto>();
         Assert.Empty(positions!);
     }
 
@@ -53,7 +53,7 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
         var rejected = await PollForTradeStateAsync(client, trade.Id, "Rejected");
         Assert.Equal("Rejected", rejected.State);
 
-        var positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+        var positions = await client.GetPositionsAsync<PositionDto>();
         Assert.Empty(positions!);
     }
 
@@ -135,7 +135,7 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
         List<PositionDto>? positions = null;
         for (var attempt = 0; attempt < 40; attempt++)
         {
-            positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+            positions = await client.GetPositionsAsync<PositionDto>();
             if (positions is { Count: 1 } && positions[0].NetVolume == expectedVolume)
                 break;
             await Task.Delay(250);

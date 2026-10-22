@@ -51,10 +51,10 @@ public sealed class TradeApprovalStateMachineTests : IAsyncDisposable
         var sagaHarness = _harness.GetSagaStateMachineHarness<TradeApprovalStateMachine, TradeApprovalState>();
         Assert.True(await sagaHarness.Exists(tradeId, x => x.CreditPending) is not null);
 
-        await _harness.Bus.Publish(new TradeApprovalGranted(tradeId));
+        await _harness.Bus.Publish(new TradeApprovalGranted(tradeId, "risk-2"));
 
         Assert.True(await _harness.Published.Any<TradeApprovalCompleted>(
-            x => x.Context.Message.TradeId == tradeId && x.Context.Message.Approved));
+            x => x.Context.Message.TradeId == tradeId && x.Context.Message.Approved && x.Context.Message.Actor == "risk-2"));
         Assert.True(await sagaHarness.NotExists(tradeId) is null);
     }
 
@@ -67,10 +67,10 @@ public sealed class TradeApprovalStateMachineTests : IAsyncDisposable
         var tenantId = Guid.NewGuid();
 
         await _harness.Bus.Publish(new TradeApprovalRequested(tradeId, tenantId, Guid.NewGuid(), 1_000_000m));
-        await _harness.Bus.Publish(new TradeApprovalDenied(tradeId));
+        await _harness.Bus.Publish(new TradeApprovalDenied(tradeId, "risk-2"));
 
         Assert.True(await _harness.Published.Any<TradeApprovalCompleted>(
-            x => x.Context.Message.TradeId == tradeId && !x.Context.Message.Approved));
+            x => x.Context.Message.TradeId == tradeId && !x.Context.Message.Approved && x.Context.Message.Actor == "risk-2"));
 
         var sagaHarness = _harness.GetSagaStateMachineHarness<TradeApprovalStateMachine, TradeApprovalState>();
         Assert.True(await sagaHarness.NotExists(tradeId) is null);
@@ -85,7 +85,7 @@ public sealed class TradeApprovalStateMachineTests : IAsyncDisposable
         var tenantId = Guid.NewGuid();
 
         await _harness.Bus.Publish(new TradeApprovalRequested(tradeId, tenantId, Guid.NewGuid(), 1_000_000m));
-        await _harness.Bus.Publish(new TradeCancelRequested(tradeId));
+        await _harness.Bus.Publish(new TradeCancelRequested(tradeId, "trader"));
 
         Assert.True(await _harness.Published.Any<TradeApprovalCancelled>(x => x.Context.Message.TradeId == tradeId));
 
@@ -100,7 +100,7 @@ public sealed class TradeApprovalStateMachineTests : IAsyncDisposable
 
         // No TradeApprovalRequested published first — covers the outbox-lag
         // race documented on TradeApprovalStateMachine's event correlations.
-        await _harness.Bus.Publish(new TradeApprovalGranted(Guid.NewGuid()));
+        await _harness.Bus.Publish(new TradeApprovalGranted(Guid.NewGuid(), "risk-2"));
 
         Assert.True(await _harness.Published.Any<Fault<TradeApprovalGranted>>());
     }

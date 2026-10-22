@@ -17,13 +17,15 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
     {
         var tenantId = Guid.NewGuid();
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        // POST /curve-points is MO-only (ADR-0030).
+        var marketDataClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
         var trade = await CreateTradeAsync(client, "POWER", "2028-02", "Buy", 100m, 40m, counterparty.Id);
         (await client.PostAsync($"/trades/{trade.Id}/submit", content: null)).EnsureSuccessStatusCode();
         await PollForSinglePositionAsync(client);
 
-        (await client.PostAsJsonAsync("/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2028-02", price = 40m }))
+        (await marketDataClient.PostAsJsonAsync("/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2028-02", price = 40m }))
             .EnsureSuccessStatusCode();
 
         await factory.Services.RunEndOfDayValuationAsync(CancellationToken.None);
@@ -44,6 +46,8 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
     {
         var tenantId = Guid.NewGuid();
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        // POST /curve-points is MO-only (ADR-0030).
+        var marketDataClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Bravo Trading", 1_000_000m);
         var trade = await CreateTradeAsync(client, "GAS", "2028-03", "Buy", 50m, 20m, counterparty.Id);
@@ -53,7 +57,7 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
         (await client.PostAsync($"/trades/{trade.Id}/deliver", content: null)).EnsureSuccessStatusCode();
         await PollForFlatPositionAsync(client, "GAS", "2028-03");
 
-        await client.PostAsJsonAsync("/curve-points/", new { commodityCode = "GAS", deliveryPeriod = "2028-03", price = 25m });
+        await marketDataClient.PostAsJsonAsync("/curve-points/", new { commodityCode = "GAS", deliveryPeriod = "2028-03", price = 25m });
 
         await factory.Services.RunEndOfDayValuationAsync(CancellationToken.None);
 
@@ -95,7 +99,7 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
     {
         for (var attempt = 0; attempt < 40; attempt++)
         {
-            var positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+            var positions = await client.GetPositionsAsync<PositionDto>();
             if (positions is { Count: 1 })
                 return;
             await Task.Delay(250);
@@ -108,9 +112,9 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
     {
         for (var attempt = 0; attempt < 40; attempt++)
         {
-            var positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+            var positions = await client.GetPositionsAsync<PositionDto>();
             var match = positions?.FirstOrDefault(p => p.CommodityCode == commodityCode && p.DeliveryPeriod == deliveryPeriod);
-            if (match is { NetVolume: 0m })
+            if (match is null or { NetVolume: 0m })
                 return;
             await Task.Delay(250);
         }

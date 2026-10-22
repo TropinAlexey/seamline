@@ -32,15 +32,16 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         var tenantIds = await DiscoverTenantIdsWithOpenPositionsAsync(cancellationToken);
-        logger.LogInformation("Valuation run starting for {TenantCount} tenant(s) with open positions.", tenantIds.Count);
+        var run = EodRun.Start();
+        logger.LogInformation("Valuation run {RunId} starting for {TenantCount} tenant(s) with open positions.", run.RunId, tenantIds.Count);
 
         foreach (var tenantId in tenantIds)
         {
-            await ValueTenantAsync(tenantId, cancellationToken);
+            await ValueTenantAsync(tenantId, run, cancellationToken);
         }
     }
 
-    private async Task ValueTenantAsync(Guid tenantId, CancellationToken cancellationToken)
+    private async Task ValueTenantAsync(Guid tenantId, EodRun run, CancellationToken cancellationToken)
     {
         using var scope = services.CreateScope();
         var tenantContext = scope.ServiceProvider.GetRequiredService<TenantContext>();
@@ -63,7 +64,7 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
 
             db.ValuationSnapshots.Add(ValuationSnapshot.Create(
                 new TenantId(tenantId), position.CommodityCode, position.DeliveryPeriod,
-                position.NetVolume, position.WeightedAvgPrice, curvePoint.Price, curvePoint.PublishedAt));
+                position.NetVolume, position.WeightedAvgPrice, curvePoint.Price, curvePoint.PublishedAt, run));
 
             // Rides along on the same Position/curvePoint this pass already
             // fetched — no separate query, no separate batch (ADR-0016).
@@ -71,7 +72,7 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
             {
                 db.StressScenarioResults.Add(StressScenarioResult.Create(
                     new TenantId(tenantId), position.CommodityCode, position.DeliveryPeriod,
-                    position.NetVolume, position.WeightedAvgPrice, curvePoint.Price, scenarioType, percentage));
+                    position.NetVolume, position.WeightedAvgPrice, curvePoint.Price, scenarioType, percentage, run));
             }
         }
 

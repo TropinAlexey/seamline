@@ -32,7 +32,9 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
             builder.Property(t => t.CounterpartyId).HasColumnName("counterparty_id");
             builder.Property(t => t.State).HasColumnName("state").HasConversion<string>().HasMaxLength(20);
             builder.Property(t => t.Version).HasColumnName("version");
+            builder.Property(t => t.LastChangedAt).HasColumnName("last_changed_at");
 
+            builder.HasIndex(t => new { t.TenantId, t.LastChangedAt });
             builder.HasQueryFilter(t => t.TenantId == tenantContext.TenantId);
         });
 

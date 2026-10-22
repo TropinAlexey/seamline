@@ -31,6 +31,11 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     public TradeState State { get; private set; }
     public int Version { get; private set; }
 
+    // Equals the latest trade_history.valid_from — stored on the row so the
+    // blotter can sort and page without a correlated subquery against the
+    // append-only history table (ADR-0030).
+    public DateTimeOffset LastChangedAt { get; private set; }
+
     private Trade() { }
 
     public static Trade CreateDraft(
@@ -61,7 +66,8 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
             Price = price,
             CounterpartyId = counterpartyId,
             State = TradeState.Draft,
-            Version = 1
+            Version = 1,
+            LastChangedAt = DateTimeOffset.UtcNow
         };
     }
 
@@ -71,7 +77,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     {
         RequireState(nameof(Submit), TradeState.Draft);
         State = TradeState.Submitted;
-        Version++;
+        Touch();
         return TradeHistory.CreateSnapshot(this, changedBy, changeReason);
     }
 
@@ -79,7 +85,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     {
         RequireState(nameof(Activate), TradeState.Submitted, TradeState.CreditPending);
         State = TradeState.Active;
-        Version++;
+        Touch();
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var activated = new TradeActivated(Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, Volume, Price, CounterpartyId, changedBy, changeReason);
         return (history, activated);
@@ -89,7 +95,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     {
         RequireState(nameof(EnterCreditPending), TradeState.Submitted);
         State = TradeState.CreditPending;
-        Version++;
+        Touch();
         return TradeHistory.CreateSnapshot(this, changedBy, changeReason);
     }
 
@@ -97,7 +103,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     {
         RequireState(nameof(Reject), TradeState.Submitted, TradeState.CreditPending);
         State = TradeState.Rejected;
-        Version++;
+        Touch();
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var rejected = new TradeRejected(Id, TenantId.Value, changedBy, changeReason);
         return (history, rejected);
@@ -112,7 +118,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     {
         RequireState(nameof(Cancel), TradeState.Draft, TradeState.Submitted, TradeState.CreditPending);
         State = TradeState.Cancelled;
-        Version++;
+        Touch();
         return TradeHistory.CreateSnapshot(this, changedBy, changeReason);
     }
 
@@ -134,7 +140,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         var oldPrice = Price;
         Volume = newVolume;
         Price = newPrice;
-        Version++;
+        Touch();
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var amended = new TradeAmended(
             Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, oldVolume, Volume, oldPrice, Price, CounterpartyId, changedBy, changeReason);
@@ -149,17 +155,25 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     {
         RequireState(nameof(Deliver), TradeState.Active);
         State = TradeState.Delivered;
-        Version++;
+        Touch();
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var delivered = new TradeDelivered(
             Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, Volume, Price, changedBy, changeReason);
         return (history, delivered);
     }
 
+    // Every transition is a new version; TradeHistory.CreateSnapshot copies
+    // LastChangedAt as the version's ValidFrom so the two never disagree.
+    private void Touch()
+    {
+        Version++;
+        LastChangedAt = DateTimeOffset.UtcNow;
+    }
+
     private void RequireState(string methodName, params ReadOnlySpan<TradeState> allowed)
     {
         if (!allowed.Contains(State))
-            throw new InvalidOperationException(
+            throw new DomainRuleViolationException(
                 $"Trade {Id}: {methodName} requires state {string.Join(" or ", allowed.ToArray())}, was {State}.");
     }
 }

@@ -1,6 +1,7 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Seamline.Modules.Risk.Contracts;
+using Seamline.Modules.Trading.Contracts;
 using Seamline.SharedKernel;
 
 namespace Seamline.Modules.Trading.Internal;
@@ -19,9 +20,13 @@ internal sealed class TradeApprovalCancelledConsumer(TradingDbContext db, Tenant
         var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == message.TradeId, context.CancellationToken)
             ?? throw new InvalidOperationException($"Trade {message.TradeId} not found.");
 
-        var history = trade.Cancel("trader", "Cancelled while awaiting risk approval");
+        const string reason = "Cancelled while awaiting risk approval";
+        // Null for a message queued before Actor existed (ADR-0030).
+        var actor = message.Actor ?? "trader";
+        var history = trade.Cancel(actor, reason);
         db.TradeHistory.Add(history);
         await creditReservationService.ReleaseAsync(trade.Id, context.CancellationToken);
+        await context.Publish(new TradeCancelled(trade.Id, message.TenantId, actor, reason));
 
         await db.SaveChangesAsync(context.CancellationToken);
     }

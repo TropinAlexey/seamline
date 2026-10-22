@@ -82,7 +82,7 @@ public class TradeTests
     {
         var trade = MoveTo((TradeState)stateValue);
 
-        Assert.Throws<InvalidOperationException>(() => trade.Submit("trader", "retry"));
+        Assert.Throws<DomainRuleViolationException>(() => trade.Submit("trader", "retry"));
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class TradeTests
     {
         var trade = MoveTo((TradeState)stateValue);
 
-        Assert.Throws<InvalidOperationException>(() => trade.Activate("system", "n/a"));
+        Assert.Throws<DomainRuleViolationException>(() => trade.Activate("system", "n/a"));
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public class TradeTests
     {
         var trade = MoveTo((TradeState)stateValue);
 
-        Assert.Throws<InvalidOperationException>(() => trade.EnterCreditPending("system", "n/a"));
+        Assert.Throws<DomainRuleViolationException>(() => trade.EnterCreditPending("system", "n/a"));
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class TradeTests
     {
         var trade = MoveTo((TradeState)stateValue);
 
-        Assert.Throws<InvalidOperationException>(() => trade.Reject("system", "n/a"));
+        Assert.Throws<DomainRuleViolationException>(() => trade.Reject("system", "n/a"));
     }
 
     [Theory]
@@ -210,7 +210,7 @@ public class TradeTests
     {
         var trade = MoveTo((TradeState)stateValue);
 
-        Assert.Throws<InvalidOperationException>(() => trade.Cancel("trader", "n/a"));
+        Assert.Throws<DomainRuleViolationException>(() => trade.Cancel("trader", "n/a"));
     }
 
     [Fact]
@@ -268,7 +268,7 @@ public class TradeTests
     {
         var trade = MoveTo((TradeState)stateValue);
 
-        Assert.Throws<InvalidOperationException>(() => trade.Amend("trader", "n/a", 150m, 46m));
+        Assert.Throws<DomainRuleViolationException>(() => trade.Amend("trader", "n/a", 150m, 46m));
     }
 
     [Fact]
@@ -301,7 +301,7 @@ public class TradeTests
     {
         var trade = MoveTo((TradeState)stateValue);
 
-        Assert.Throws<InvalidOperationException>(() => trade.Deliver("trader", "n/a"));
+        Assert.Throws<DomainRuleViolationException>(() => trade.Deliver("trader", "n/a"));
     }
 
     // Drives a fresh trade through the real transitions to reach the

@@ -14,7 +14,10 @@ public sealed class MarketDataAndSettlementTests(SeamlineApiFactory factory) : I
     [Fact]
     public async Task A_position_carries_the_published_curve_price()
     {
-        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.FrontOffice);
+        var tenantId = Guid.NewGuid();
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        // POST /curve-points is MO-only (ADR-0030).
+        var marketDataClient = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.MiddleOffice);
 
         var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
         var trade = await CreateTradeAsync(client, "POWER", "2027-07", "Buy", 100m, 45.5m, counterparty.Id);
@@ -23,7 +26,7 @@ public sealed class MarketDataAndSettlementTests(SeamlineApiFactory factory) : I
 
         await PollForSinglePositionAsync(client);
 
-        var curveResponse = await client.PostAsJsonAsync(
+        var curveResponse = await marketDataClient.PostAsJsonAsync(
             "/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2027-07", price = 48.25m });
         curveResponse.EnsureSuccessStatusCode();
 
@@ -79,7 +82,7 @@ public sealed class MarketDataAndSettlementTests(SeamlineApiFactory factory) : I
     {
         for (var attempt = 0; attempt < 40; attempt++)
         {
-            var positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+            var positions = await client.GetPositionsAsync<PositionDto>();
             if (positions is { Count: 1 })
                 return;
             await Task.Delay(250);
@@ -91,7 +94,7 @@ public sealed class MarketDataAndSettlementTests(SeamlineApiFactory factory) : I
         List<PositionDto>? positions = null;
         for (var attempt = 0; attempt < 40; attempt++)
         {
-            positions = await client.GetFromJsonAsync<List<PositionDto>>("/positions");
+            positions = await client.GetPositionsAsync<PositionDto>();
             if (positions is { Count: 1 } && positions[0].MarkPrice is not null)
                 break;
             await Task.Delay(250);

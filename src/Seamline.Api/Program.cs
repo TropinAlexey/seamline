@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
@@ -5,6 +6,7 @@ using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Seamline.SharedKernel;
@@ -23,8 +25,24 @@ using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Build-time OpenAPI generation (Microsoft.Extensions.ApiDescription.Server,
+// ADR-0030) runs this entry point up to app.Run() inside a host named
+// GetDocument.Insider. Endpoints must still be mapped, but there is no
+// database (and no connection string) at build time — touching it would
+// fail the build.
+var isGeneratingOpenApiDocument = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
+
+
 builder.Services.AddOpenApi();
-builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.ConfigureHttpJsonOptions(o =>
+{
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    // The web defaults also accept numbers sent as strings, which makes the
+    // OpenAPI schema describe every decimal as "number | string" and leaks
+    // into the generated TS client. Output is unaffected — decimals are
+    // still written as JSON numbers (ADR-0030).
+    o.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
+});
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("seamline-api"))
@@ -42,18 +60,47 @@ builder.Services.AddOpenTelemetry()
         .AddMeter("MassTransit")
         .AddOtlpExporter());
 
-builder.Services.AddHealthChecks()
-    .AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!, name: "postgres");
+var healthChecks = builder.Services.AddHealthChecks();
+if (!isGeneratingOpenApiDocument)
+    healthChecks.AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!, name: "postgres");
 
+// One fixed window per client IP, not one shared by every caller — a
+// single global window let any client lock everyone else out of login for
+// the rest of the minute (ADR-0030). Read per partition from the request's
+// configuration so tests can lower it without process-wide env vars.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("login", o =>
-    {
-        o.PermitLimit = builder.Configuration.GetValue("RateLimiting:LoginPermitLimit", 5);
-        o.Window = TimeSpan.FromMinutes(1);
-        o.QueueLimit = 0;
-    });
+    options.AddPolicy("login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = context.RequestServices.GetRequiredService<IConfiguration>()
+                    .GetValue("RateLimiting:LoginPermitLimit", 5),
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
+
+// Behind nginx (compose) or ingress + nginx (k8s) every request arrives from
+// a proxy, which would collapse the per-IP limiter above back into one
+// global window. X-Forwarded-For is trusted only when ReverseProxy:KnownNetworks
+// is set (the middleware itself is not registered otherwise — with empty
+// known lists ASP.NET Core would accept the header from any caller), and
+// only for exactly ReverseProxy:ForwardLimit hops: 1 behind compose's nginx,
+// 2 behind Traefik + nginx in k8s. Consuming a fixed number of hops from the
+// right means a client-supplied entry further left is never reached, even
+// when the client's own address happens to sit inside a trusted range.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+    options.ForwardLimit = builder.Configuration.GetValue("ReverseProxy:ForwardLimit", 1);
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+    var networks = builder.Configuration["ReverseProxy:KnownNetworks"] ?? string.Empty;
+    foreach (var cidr in networks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(cidr));
 });
 
 builder.Services
@@ -106,7 +153,9 @@ builder.Services.AddMassTransit(x =>
         cfg.ConfigureEndpoints(context);
     }
 
-    var transport = builder.Configuration["MessageBroker:Transport"];
+    // No broker exists at build time either; in-memory keeps document
+    // generation from trying (and retrying) to reach RabbitMQ.
+    var transport = isGeneratingOpenApiDocument ? "InMemory" : builder.Configuration["MessageBroker:Transport"];
 
     // The message scheduler is load-bearing: the credit-limit saga (ADR-0008)
     // uses Schedule<> for approval timeouts. Each transport provides its own
@@ -164,27 +213,30 @@ builder.Services.AddMassTransit(x =>
 
 var app = builder.Build();
 
-try
+if (!isGeneratingOpenApiDocument)
 {
-    await EnsureAppRoleAsync(app.Configuration, app.Logger);
+    try
+    {
+        await EnsureAppRoleAsync(app.Configuration, app.Logger);
 
-    await app.Services.MigrateReferenceModuleAsync();
-    await app.Services.MigrateTradingModuleAsync();
-    await app.Services.MigrateRiskModuleAsync();
-    await app.Services.MigrateAuditModuleAsync();
-    await app.Services.MigrateMarketDataModuleAsync();
-    await app.Services.MigrateSettlementModuleAsync();
-    await app.Services.MigrateIdentityModuleAsync();
-}
-catch (Exception ex)
-{
-    // Exit explicitly instead of letting the exception go unhandled: an unhandled
-    // exception aborts via SIGABRT, which hangs the process if it runs as PID 1 without
-    // an init (ADR-0029). This also gives one readable log line and exit code 1.
-    app.Logger.LogCritical(ex, "Database initialization failed");
-    await app.DisposeAsync(); // flushes the console logger
-    Environment.ExitCode = 1;
-    return;
+        await app.Services.MigrateReferenceModuleAsync();
+        await app.Services.MigrateTradingModuleAsync();
+        await app.Services.MigrateRiskModuleAsync();
+        await app.Services.MigrateAuditModuleAsync();
+        await app.Services.MigrateMarketDataModuleAsync();
+        await app.Services.MigrateSettlementModuleAsync();
+        await app.Services.MigrateIdentityModuleAsync();
+    }
+    catch (Exception ex)
+    {
+        // Exit explicitly instead of letting the exception go unhandled: an unhandled
+        // exception aborts via SIGABRT, which hangs the process if it runs as PID 1 without
+        // an init (ADR-0029). This also gives one readable log line and exit code 1.
+        app.Logger.LogCritical(ex, "Database initialization failed");
+        await app.DisposeAsync(); // flushes the console logger
+        Environment.ExitCode = 1;
+        return;
+    }
 }
 
 if (args.Contains("--migrate-only"))
@@ -195,8 +247,13 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+if (!string.IsNullOrWhiteSpace(app.Configuration["ReverseProxy:KnownNetworks"]))
+    app.UseForwardedHeaders();
+
 app.UseHttpsRedirection();
 
+// ArgumentException → 400, DomainRuleViolationException → 409. Nothing
+// broader: a bare InvalidOperationException is a bug and stays a 500.
 app.Use(async (context, next) =>
 {
     try
@@ -206,8 +263,12 @@ app.Use(async (context, next) =>
     catch (ArgumentException ex)
     {
         context.Response.StatusCode = StatusCodes.Status400BadRequest;
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+        await context.Response.WriteAsJsonAsync(new ErrorResponse(ex.Message));
+    }
+    catch (DomainRuleViolationException ex)
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new ErrorResponse(ex.Message));
     }
 });
 
@@ -266,6 +327,7 @@ app.MapTradingEndpoints();
 app.MapRiskEndpoints();
 app.MapMarketDataEndpoints();
 app.MapSettlementEndpoints();
+app.MapAuditEndpoints();
 
 app.Run();
 

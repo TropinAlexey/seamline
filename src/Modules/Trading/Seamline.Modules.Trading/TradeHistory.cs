@@ -38,7 +38,7 @@ internal sealed class TradeHistory
             TradeId = trade.Id,
             TenantId = trade.TenantId,
             Version = trade.Version,
-            ValidFrom = DateTimeOffset.UtcNow,
+            ValidFrom = trade.LastChangedAt,
             ChangedBy = changedBy,
             ChangeReason = changeReason,
             CommodityCode = trade.CommodityCode,

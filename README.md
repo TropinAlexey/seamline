@@ -105,7 +105,7 @@ contains no business logic and does no arithmetic on money or volume —
 every notional and total comes from the server; `web/src/format/` only
 formats.
 
-![Trade detail: state machine with CreditPending lit, approval countdown, four-eyes actions and version history](docs/images/web-ui-trade-detail.png)
+![Trade detail: a limit breach approved by risk, then amended — version history with the field diff and the REMIT New/Modify reports acknowledged by the ACER stub](docs/images/web-ui-trade-detail.png)
 
 ![Stress scenarios: total MTM per scenario against the base from the same EOD run](docs/images/web-ui-stress.png)
 

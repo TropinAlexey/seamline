@@ -667,7 +667,7 @@ rather than hidden:
 | Multi-tenant isolation | EF Core global filter + PostgreSQL RLS | Same — this is production-grade |
 | Health detail endpoint | Anonymous, exception text hidden in prod | Behind auth or removed; export to Prometheus instead |
 | HTTPS | `UseHttpsRedirection()` in pipeline | TLS termination at ALB/App Gateway |
-| Rate limiting | None | ASP.NET `RateLimiter` middleware |
+| Rate limiting | `POST /auth/login` only: 5 per minute per client IP, `X-Forwarded-For` trusted only from configured proxy networks (ADR-0030) | Per-account limit with backoff; edge rate limiting (WAF / API gateway) for all endpoints |
 | Audit trail | Append-only, `SELECT`/`INSERT` grants only | Same — this is production-grade |
 | Stored credentials | None — OIDC workload identity federation | Same |
 

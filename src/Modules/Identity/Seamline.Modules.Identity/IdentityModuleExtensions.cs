@@ -29,6 +29,6 @@ public static class IdentityModuleExtensions
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", IdentityDbContext.Schema));
 
         await using var migrationContext = new IdentityDbContext(optionsBuilder.Options, new TenantContext());
-        await migrationContext.Database.MigrateAsync();
+        await migrationContext.MigrateWithLockAsync();
     }
 }

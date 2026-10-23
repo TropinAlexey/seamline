@@ -45,7 +45,7 @@ public static class TradingModuleExtensions
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", TradingDbContext.Schema));
 
         await using var migrationContext = new TradingDbContext(optionsBuilder.Options, new TenantContext());
-        await migrationContext.Database.MigrateAsync();
+        await migrationContext.MigrateWithLockAsync();
     }
 
     // Entry point Reporting.Worker calls (ADR-0002, ADR-0015) — the actual

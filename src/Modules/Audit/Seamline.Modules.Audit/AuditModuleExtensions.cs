@@ -30,7 +30,7 @@ public static class AuditModuleExtensions
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", AuditDbContext.Schema));
 
         await using var migrationContext = new AuditDbContext(optionsBuilder.Options, new TenantContext());
-        await migrationContext.Database.MigrateAsync();
+        await migrationContext.MigrateWithLockAsync();
     }
 
     public static void AddAuditMassTransitConfiguration(this IBusRegistrationConfigurator configurator)

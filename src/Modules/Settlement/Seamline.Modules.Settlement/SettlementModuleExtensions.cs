@@ -30,7 +30,7 @@ public static class SettlementModuleExtensions
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", SettlementDbContext.Schema));
 
         await using var migrationContext = new SettlementDbContext(optionsBuilder.Options, new TenantContext());
-        await migrationContext.Database.MigrateAsync();
+        await migrationContext.MigrateWithLockAsync();
     }
 
     // Settlement never publishes — it's a pure sink for TradeDelivered, same

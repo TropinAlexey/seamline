@@ -60,7 +60,7 @@ public static class MarketDataModuleExtensions
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", MarketDataDbContext.Schema));
 
         await using var migrationContext = new MarketDataDbContext(optionsBuilder.Options, new TenantContext());
-        await migrationContext.Database.MigrateAsync();
+        await migrationContext.MigrateWithLockAsync();
     }
 
     // Entry point Valuation.Worker calls (ADR-0018) — the actual logic

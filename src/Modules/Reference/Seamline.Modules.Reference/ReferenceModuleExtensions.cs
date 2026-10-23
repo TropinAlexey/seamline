@@ -34,6 +34,6 @@ public static class ReferenceModuleExtensions
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", ReferenceDbContext.Schema));
 
         await using var migrationContext = new ReferenceDbContext(optionsBuilder.Options, new TenantContext());
-        await migrationContext.Database.MigrateAsync();
+        await migrationContext.MigrateWithLockAsync();
     }
 }

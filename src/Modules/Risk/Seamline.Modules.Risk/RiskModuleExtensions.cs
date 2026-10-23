@@ -34,7 +34,7 @@ public static class RiskModuleExtensions
                 npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", RiskDbContext.Schema));
 
         await using var migrationContext = new RiskDbContext(optionsBuilder.Options, new TenantContext());
-        await migrationContext.Database.MigrateAsync();
+        await migrationContext.MigrateWithLockAsync();
     }
 
     public static void AddRiskMassTransitConfiguration(this IBusRegistrationConfigurator configurator)

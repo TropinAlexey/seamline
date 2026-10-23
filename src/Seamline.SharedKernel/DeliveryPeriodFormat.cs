@@ -11,4 +11,8 @@ public static class DeliveryPeriodFormat
             throw new ArgumentException(
                 "Delivery period must be in YYYY-MM format (e.g. 2026-08).", nameof(deliveryPeriod));
     }
+
+    // A date belongs to the delivery period when it falls in that month —
+    // a cargo's laycan and an index trade's pricing window both must (ADR-0032).
+    public static bool Contains(string deliveryPeriod, DateOnly date) => $"{date:yyyy-MM}" == deliveryPeriod;
 }

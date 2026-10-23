@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Seamline.Modules.Identity.Contracts;
+using Seamline.Modules.MarketData.Contracts;
 using Seamline.Modules.Reference.Contracts;
 using Seamline.Modules.Risk.Contracts;
 using Seamline.Modules.Trading.Contracts;
@@ -28,6 +29,7 @@ public static class TradingEndpoints
             ITenantContext tenant,
             ICounterpartyDirectory counterparties,
             ICommodityDirectory commodities,
+            IIndexFixingDirectory indices,
             IPublishEndpoint publisher,
             ClaimsPrincipal user,
             CancellationToken ct) =>
@@ -55,6 +57,20 @@ public static class TradingEndpoints
                 return Results.BadRequest(new ErrorResponse($"{commodity.Code} is a flow commodity: cargo terms do not apply."));
             }
 
+            // Index pricing: cargo commodities only, against an index of the
+            // same commodity (ADR-0035). Exactly one of price and formula.
+            IndexPricingTerms? pricing = null;
+            if (request.IndexPricing is { } formula)
+            {
+                if (commodity.DeliveryModel != DeliveryModel.Cargo)
+                    return Results.BadRequest(new ErrorResponse(
+                        $"{commodity.Code} is a flow commodity: index pricing is offered on cargo commodities only."));
+                var index = await indices.FindIndexAsync(formula.IndexCode, ct);
+                if (index is null || index.CommodityCode != commodity.Code)
+                    return Results.BadRequest(new ErrorResponse($"No {commodity.Code} index {formula.IndexCode}."));
+                pricing = new IndexPricingTerms(index.Code, formula.WindowFrom, formula.WindowTo, formula.Premium);
+            }
+
             // Checked here, not left to the credit check at submit time: a
             // draft pointing at a counterparty that doesn't exist would
             // otherwise be accepted and then fail every submit.
@@ -69,7 +85,8 @@ public static class TradingEndpoints
                 request.Volume,
                 request.Price,
                 request.CounterpartyId,
-                cargoTerms);
+                cargoTerms,
+                pricing);
 
             db.Trades.Add(trade);
             var actor = ActorName(user);
@@ -151,6 +168,7 @@ public static class TradingEndpoints
             TradingDbContext db,
             ITenantContext tenant,
             ICreditReservationService creditReservationService,
+            IFormulaPricingService formulaPricing,
             IPublishEndpoint publisher,
             ClaimsPrincipal user,
             CancellationToken ct) =>
@@ -158,6 +176,17 @@ public static class TradingEndpoints
             var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
             if (trade is null)
                 return Results.NotFound();
+
+            // An unfixed index trade is credit-checked at its expected price,
+            // which needs at least a forward or a fixing (spec 03, rule 6).
+            var notional = trade.Notional;
+            if (trade.Price is null && await formulaPricing.PriceFormulaAsync(trade, ct) is { } priced)
+            {
+                notional = priced.ExpectedNotional;
+                if (notional is null)
+                    return Results.BadRequest(new ErrorResponse(
+                        $"No forward curve point for {trade.CommodityCode} {trade.DeliveryPeriod} and no fixing yet: an index-priced trade cannot be credit-checked."));
+            }
 
             var actor = ActorName(user);
             var submitHistory = trade.Submit(actor, "Submitted for credit check");
@@ -167,7 +196,7 @@ public static class TradingEndpoints
             var signedVolume = trade.Direction == TradeDirection.Buy ? trade.Volume : -trade.Volume;
             var reservation = await creditReservationService.TryReserveAsync(
                 tenant.TenantId.Value, trade.CounterpartyId, trade.Id,
-                trade.CommodityCode, trade.DeliveryPeriod, signedVolume, trade.Price, ct);
+                trade.CommodityCode, trade.DeliveryPeriod, signedVolume, trade.Price, trade.Pricing, ct);
 
             if (reservation.Outcome == CreditReservationOutcome.Reserved)
             {
@@ -179,7 +208,7 @@ public static class TradingEndpoints
             {
                 var pendingHistory = trade.EnterCreditPending("system", "Credit limit breached — awaiting risk approval");
                 db.TradeHistory.Add(pendingHistory);
-                await publisher.Publish(new TradeApprovalRequested(trade.Id, tenant.TenantId.Value, trade.CounterpartyId, trade.Notional), ct);
+                await publisher.Publish(new TradeApprovalRequested(trade.Id, tenant.TenantId.Value, trade.CounterpartyId, notional!.Value), ct);
             }
 
             await db.SaveChangesAsync(ct);
@@ -293,6 +322,56 @@ public static class TradingEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
+        // Where an index-priced trade stands: k of N days fixed, expected
+        // price, fixed and unfixed quantity (spec 03). Risk computes it; the
+        // route lives here because the terms are the trade's.
+        group.MapGet("/{id:guid}/pricing", async (Guid id, TradingDbContext db, IFormulaPricingService formulaPricing, CancellationToken ct) =>
+        {
+            var trade = await db.Trades.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+            if (trade is null || await formulaPricing.PriceFormulaAsync(trade, ct) is not { } priced)
+                return Results.NotFound();
+
+            return Results.Ok(TradePricing.From(trade.Pricing!, priced, trade.Price));
+        })
+        .Produces<TradePricing>()
+        .Produces(StatusCodes.Status404NotFound);
+
+        // The window has fully fixed: back office confirms the final price
+        // and Trading writes it (ADR-0038). One transaction: the new trade
+        // version and TradePriceFixed through the outbox. If the cargo is
+        // already certified, the event carries the certificate so the final
+        // invoice can follow.
+        group.MapPost("/{id:guid}/fix-price", async (
+            Guid id, TradingDbContext db, IFormulaPricingService formulaPricing, IPublishEndpoint publisher, ClaimsPrincipal user, CancellationToken ct) =>
+        {
+            // Serialized with the certificate (TradeRowLock): whichever of the
+            // two commits second sees the first and carries both halves.
+            await using var transaction = await TradeRowLock.AcquireAsync(db, id, ct);
+            var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id, ct);
+            if (trade is null)
+                return Results.NotFound();
+            if (await formulaPricing.PriceFormulaAsync(trade, ct) is not { } priced)
+                return Results.Conflict(new ErrorResponse($"Trade {id} is fixed-price; there is no window to fix."));
+            if (priced.FinalPrice is not { } finalPrice)
+                return Results.Conflict(new ErrorResponse(
+                    $"{priced.FixedDays} of {priced.PricingDays} pricing days of {trade.Pricing!.IndexCode} have fixed; the price can be fixed when all have."));
+
+            var shipment = await db.Shipments.FirstOrDefaultAsync(s => s.TradeId == id, ct);
+            var certificate = shipment?.CertifiedQuality(trade.CargoTerms!);
+
+            var (history, priceFixed) = trade.FixPrice(ActorName(user), finalPrice, priced.AverageFixing!.Value, certificate);
+            db.TradeHistory.Add(history);
+            await publisher.Publish(priceFixed, ct);
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return Results.Ok(TradeSummary.From(trade));
+        })
+        .RequireAuthorization(policy => policy.RequireRole(IdentityRoles.BackOffice))
+        .Produces<TradeSummary>()
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
         app.MapShipmentEndpoints();
 
         return app;
@@ -307,13 +386,43 @@ internal sealed record CreateTradeRequest(
     string DeliveryPeriod,
     TradeDirection Direction,
     decimal Volume,
-    decimal Price,
+    decimal? Price,
     Guid CounterpartyId,
-    CargoTermsRequest? CargoTerms = null);
+    CargoTermsRequest? CargoTerms = null,
+    IndexPricingRequest? IndexPricing = null);
 
 internal sealed record CargoTermsRequest(decimal TolerancePct, DateOnly LaycanFrom, DateOnly LaycanTo);
 
-internal sealed record AmendTradeRequest(decimal Volume, decimal Price, string Reason);
+internal sealed record IndexPricingRequest(string IndexCode, DateOnly WindowFrom, DateOnly WindowTo, decimal Premium);
+
+// Price is omitted when amending an index-priced trade: only its volume
+// can change (ADR-0035).
+internal sealed record AmendTradeRequest(decimal Volume, decimal? Price, string Reason);
+
+internal sealed record TradePricing(
+    string IndexCode,
+    DateOnly WindowFrom,
+    DateOnly WindowTo,
+    decimal Premium,
+    int PricingDays,
+    int FixedDays,
+    decimal? AverageFixing,
+    decimal? Forward,
+    decimal? ExpectedPrice,
+    decimal FixedQuantity,
+    decimal UnfixedQuantity,
+    decimal? FormulaFinalPrice,
+    decimal? ConfirmedPrice)
+{
+    // Two different facts (ADR-0038): FormulaFinalPrice is what the fixings
+    // give once every day has fixed; ConfirmedPrice is the price back office
+    // has written to the trade. The gap between them is a confirmation
+    // still to do.
+    public static TradePricing From(IndexPricingTerms terms, FormulaPricingRef priced, decimal? tradePrice) => new(
+        terms.IndexCode, terms.WindowFrom, terms.WindowTo, terms.Premium,
+        priced.PricingDays, priced.FixedDays, priced.AverageFixing, priced.Forward, priced.ExpectedPrice,
+        priced.FixedQuantity, priced.UnfixedQuantity, priced.FinalPrice, tradePrice);
+}
 
 internal sealed record TradeListQuery(
     [FromQuery(Name = "state")] TradeState[]? State,
@@ -328,12 +437,13 @@ internal sealed record TradeStateResponse(Guid Id, TradeState State);
 
 internal sealed record TradeSubmitResponse(Guid Id, TradeState State, CreditReservationOutcome Outcome);
 
-internal sealed record TradeAmendResponse(Guid Id, TradeState State, decimal Volume, decimal Price);
+internal sealed record TradeAmendResponse(Guid Id, TradeState State, decimal Volume, decimal? Price);
 
 internal sealed record TradePage(IReadOnlyList<TradeSummary> Items, int Total);
 
 // Notional is computed here, server-side, so the UI never multiplies money
-// (ADR-0030). Counterparty name is deliberately absent — it lives in the
+// (ADR-0030); Price and Notional are null while an index-priced trade is
+// unfixed, and Pricing holds its formula. Counterparty name is deliberately absent — it lives in the
 // Reference schema; the client joins it from GET /counterparties.
 internal sealed record TradeSummary(
     Guid Id,
@@ -341,18 +451,19 @@ internal sealed record TradeSummary(
     string DeliveryPeriod,
     TradeDirection Direction,
     decimal Volume,
-    decimal Price,
-    decimal Notional,
+    decimal? Price,
+    decimal? Notional,
     Guid CounterpartyId,
     TradeState State,
     int Version,
     DateTimeOffset LastChangedAt,
     decimal? ActualVolume,
-    CargoTermsRef? CargoTerms)
+    CargoTermsRef? CargoTerms,
+    IndexPricingTerms? Pricing)
 {
     public static TradeSummary From(Trade t) => new(
         t.Id, t.CommodityCode, t.DeliveryPeriod, t.Direction, t.Volume, t.Price, t.Notional,
-        t.CounterpartyId, t.State, t.Version, t.LastChangedAt, t.ActualVolume, t.CargoTerms?.ToRef());
+        t.CounterpartyId, t.State, t.Version, t.LastChangedAt, t.ActualVolume, t.CargoTerms?.ToRef(), t.Pricing);
 }
 
 internal sealed record TradeHistoryEntry(
@@ -365,8 +476,8 @@ internal sealed record TradeHistoryEntry(
     string DeliveryPeriod,
     TradeDirection Direction,
     decimal Volume,
-    decimal Price,
-    decimal Notional,
+    decimal? Price,
+    decimal? Notional,
     Guid CounterpartyId,
     decimal? ActualVolume)
 {

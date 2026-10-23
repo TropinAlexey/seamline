@@ -115,7 +115,7 @@ public class CargoTradeTests
         var (shipment, _, _) = Shipment.Nominate(trade, "MV Demo", "9876543", new DateOnly(2027, 3, 12), "ops");
         shipment.RecordLoading(78_500m, new DateOnly(2027, 3, 14), "ops");
 
-        var (_, @event) = shipment.RecordCertificate(trade.CargoTerms!, nar, sulphur, ash, "ops");
+        var (_, @event) = shipment.RecordCertificate(trade.CargoTerms!, nar, sulphur, ash, "ops", trade.Price);
 
         Assert.Equal(accepted ? ShipmentState.QualityCertified : ShipmentState.QualityRejected, shipment.State);
         Assert.IsType(accepted ? typeof(CargoQualityCertified) : typeof(CargoQualityRejected), @event);

@@ -8,7 +8,9 @@
 //   dotnet run tools/seed/seed.cs -- http://localhost:5000 # straight at the API
 //
 // Idempotent enough to re-run: a tenant that already has counterparties is
-// skipped. Logs in once per user (the login endpoint is rate limited).
+// skipped. Logs in once per user. The login endpoint allows five attempts
+// a minute per client, and the seed needs six, so a 429 waits for the next
+// window instead of failing.
 
 using System.Net;
 using System.Net.Http.Headers;
@@ -54,7 +56,9 @@ foreach (var tenant in tenants)
     {
         [("POWER", "2027-01")] = 92.40m, [("POWER", "2027-02")] = 88.10m, [("POWER", "2027-03")] = 79.75m,
         [("GAS", "2027-01")] = 36.20m, [("GAS", "2027-02")] = 34.85m, [("GAS", "2027-03")] = 31.10m,
-        [("COAL", "2027-03")] = 108.00m, [("COAL", "2027-04")] = 111.50m,
+        // COAL 2027-03 is spec 03's forward, so the index-priced example
+        // below shows the spec's numbers.
+        [("COAL", "2027-03")] = 106.00m, [("COAL", "2027-04")] = 111.50m,
     };
     foreach (var ((commodity, period), price) in curve)
         await SendAsync(risk, HttpMethod.Post, "curve-points", new { commodityCode = commodity, deliveryPeriod = period, price });
@@ -107,6 +111,22 @@ foreach (var tenant in tenants)
         // And one waiting for back office to nominate a vessel.
         var awaiting = await CreateCargoAsync(trader, "2027-04", "Sell", 50_000m, 112.00m, bulk, 5m, "2027-04-05", "2027-04-15");
         await SubmitAsync(trader, awaiting);
+
+        // Index-priced coal (ADR-0035, spec 03): March average of COAL-IDX
+        // plus 1.5000, with ten of the 23 pricing days fixed at an average
+        // of 104.2000 — expected price 106.7174, MtM -53,804.35. The
+        // fixings are append-only, so they are published once, here.
+        var march = Enumerable.Range(1, 31).Select(d => new DateOnly(2027, 3, d))
+            .Where(d => d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)).Take(10).ToList();
+        for (var i = 0; i < march.Count; i++)
+            await SendAsync(risk, HttpMethod.Post, "indices/COAL-IDX/fixings", new { fixingDate = march[i], value = i % 2 == 0 ? 104.00m : 104.40m });
+        var indexPriced = await PostAsync<IdResult>(trader, "trades", new
+        {
+            commodityCode = "COAL", deliveryPeriod = "2027-03", direction = "Buy", volume = 75_000m, counterpartyId = bulk,
+            cargoTerms = new { tolerancePct = 10m, laycanFrom = "2027-03-22", laycanTo = "2027-03-26" },
+            indexPricing = new { indexCode = "COAL-IDX", windowFrom = "2027-03-01", windowTo = "2027-03-31", premium = 1.50m }
+        });
+        await SubmitAsync(trader, indexPriced.Id);
     }
     else
     {
@@ -124,6 +144,12 @@ async Task<HttpClient> LoginAsync(Guid tenantId, string login)
 {
     var client = new HttpClient { BaseAddress = new Uri(baseUrl) };
     var response = await client.PostAsJsonAsync("auth/login", new { tenantId, login, password });
+    for (var attempt = 0; response.StatusCode == HttpStatusCode.TooManyRequests && attempt < 2; attempt++)
+    {
+        Console.WriteLine("   login rate limit reached — waiting for the next one-minute window…");
+        await Task.Delay(TimeSpan.FromSeconds(61));
+        response = await client.PostAsJsonAsync("auth/login", new { tenantId, login, password });
+    }
     if (response.StatusCode == HttpStatusCode.TooManyRequests)
         throw new InvalidOperationException("Login rate limit hit — wait a minute and re-run.");
     response.EnsureSuccessStatusCode();

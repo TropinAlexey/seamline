@@ -19,7 +19,21 @@ internal sealed class SyntheticCurveSource : ICurveSource
         ["COAL"] = 110m
     };
 
-    public Task<decimal?> GetMonthlyAveragePriceAsync(string commodityCode, DateOnly month, CancellationToken cancellationToken = default)
+    public Task<decimal?> GetMonthlyAveragePriceAsync(string commodityCode, DateOnly month, CancellationToken cancellationToken = default) =>
+        Task.FromResult<decimal?>(MonthlyPrice(commodityCode, month));
+
+    // The deterministic weekday fixing series of a synthetic index on this
+    // commodity (ADR-0035): within ±2 % of the month's synthetic price, so a
+    // month's fixings average out near its curve point. The same date always
+    // gives the same value, like the monthly price.
+    public decimal DailyFixing(string commodityCode, DateOnly date)
+    {
+        var seed = StringHash(commodityCode) ^ (date.Year * 397) ^ (date.Month * 31) ^ date.Day;
+        var variation = new Random(seed).Next(-200, 201) / 10_000m;
+        return Math.Round(MonthlyPrice(commodityCode, date) * (1 + variation), 4, MidpointRounding.ToEven);
+    }
+
+    private static decimal MonthlyPrice(string commodityCode, DateOnly month)
     {
         var basePrice = BasePrices.GetValueOrDefault(commodityCode, 50m);
 
@@ -27,8 +41,7 @@ internal sealed class SyntheticCurveSource : ICurveSource
         var seed = StringHash(commodityCode) ^ (month.Year * 397) ^ month.Month;
         var variationPercent = new Random(seed).Next(-10, 11) / 100m;
 
-        var price = Math.Round(basePrice * (1 + variationPercent), 2, MidpointRounding.ToEven);
-        return Task.FromResult<decimal?>(price);
+        return Math.Round(basePrice * (1 + variationPercent), 2, MidpointRounding.ToEven);
     }
 
     private static int StringHash(string s)

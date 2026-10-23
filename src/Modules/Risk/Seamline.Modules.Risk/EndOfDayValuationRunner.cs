@@ -31,7 +31,7 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        var tenantIds = await DiscoverTenantIdsWithOpenPositionsAsync(cancellationToken);
+        var tenantIds = await DiscoverTenantIdsWithOpenExposureAsync(cancellationToken);
         var run = EodRun.Start();
         logger.LogInformation("Valuation run {RunId} starting for {TenantCount} tenant(s) with open positions.", run.RunId, tenantIds.Count);
 
@@ -76,7 +76,43 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
             }
         }
 
+        await ValueFormulaTradesAsync(scope.ServiceProvider, db, run, tenantId, cancellationToken);
+
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    // Index-priced trades are valued one by one (ADR-0035): MtM is
+    // (F − expected) × V, and each stress scenario recomputes the expected
+    // price at the shocked forward. Same run, same RunId as the positions.
+    private async Task ValueFormulaTradesAsync(
+        IServiceProvider scopedServices, RiskDbContext db, EodRun run, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var pricing = scopedServices.GetRequiredService<FormulaPricingService>();
+        var curveDirectory = scopedServices.GetRequiredService<ICurvePointDirectory>();
+
+        var trades = await db.FormulaTrades.Where(f => f.IsOpen).ToListAsync(cancellationToken);
+        foreach (var trade in trades)
+        {
+            var curvePoint = await curveDirectory.FindAsync(trade.CommodityCode, trade.DeliveryPeriod, cancellationToken);
+            if (curvePoint is null)
+            {
+                logger.LogWarning(
+                    "No curve point published for {Commodity}/{Period} (tenant {TenantId}) — skipping formula trade {TradeId} for this run.",
+                    trade.CommodityCode, trade.DeliveryPeriod, tenantId, trade.TradeId);
+                continue;
+            }
+
+            var formula = await pricing.LoadAsync(trade.CommodityCode, trade.DeliveryPeriod, trade.Pricing, cancellationToken);
+            var expected = trade.MarkPrice(formula)!.Value;
+            db.ValuationSnapshots.Add(ValuationSnapshot.CreateForFormulaTrade(
+                trade, expected, curvePoint.Price, curvePoint.PublishedAt, run));
+
+            foreach (var (scenarioType, percentage) in Scenarios)
+            {
+                db.StressScenarioResults.Add(StressScenarioResult.CreateForFormulaTrade(
+                    trade, formula, curvePoint.Price, scenarioType, percentage, run));
+            }
+        }
     }
 
     // No tenant registry exists anywhere in this project — multi-tenancy is
@@ -86,17 +122,23 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
     // read. Every per-tenant read/write after this still goes through the
     // restricted seamline_app connection with RLS and the query filter both
     // active, same as everywhere else in the app.
-    private async Task<List<Guid>> DiscoverTenantIdsWithOpenPositionsAsync(CancellationToken cancellationToken)
+    private async Task<List<Guid>> DiscoverTenantIdsWithOpenExposureAsync(CancellationToken cancellationToken)
     {
         var configuration = services.GetRequiredService<IConfiguration>();
         var optionsBuilder = new DbContextOptionsBuilder<RiskDbContext>()
             .UseNpgsql(configuration.GetConnectionString("PostgresMigrator"));
 
         await using var db = new RiskDbContext(optionsBuilder.Options, new TenantContext());
-        return await db.Positions.IgnoreQueryFilters()
+        var withPositions = await db.Positions.IgnoreQueryFilters()
             .Where(p => p.NetVolume != 0)
             .Select(p => p.TenantId.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
+        var withFormulaTrades = await db.FormulaTrades.IgnoreQueryFilters()
+            .Where(f => f.IsOpen)
+            .Select(f => f.TenantId.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return withPositions.Union(withFormulaTrades).ToList();
     }
 }

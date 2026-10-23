@@ -4,6 +4,12 @@ namespace Seamline.Modules.Trading.Contracts;
 // Actor/Reason for Audit (ADR-0010); Settlement reacts to the certificate.
 // Loading itself is announced as TradeDelivered — loading is delivery under
 // FOB — so there is no separate "loaded" event to keep in step with it.
+//
+// CargoQualityCertified carries the price the final invoice is adjusted
+// from (ADR-0035): the contract price, or an index-priced trade's final
+// price. PricePending says the window has not fixed yet, and the final
+// invoice then follows TradePriceFixed instead. Both default so a message
+// from before this change still means "adjust the provisional price".
 
 public sealed record CargoNominated(
     Guid TradeId,
@@ -22,7 +28,9 @@ public sealed record CargoQualityCertified(
     decimal AshPct,
     decimal BaseNarKcalKg,
     string Actor,
-    string Reason);
+    string Reason,
+    decimal? FinalPrice = null,
+    bool PricePending = false);
 
 public sealed record CargoQualityRejected(
     Guid TradeId,

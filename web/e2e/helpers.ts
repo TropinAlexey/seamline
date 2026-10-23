@@ -64,14 +64,26 @@ export async function api(tenant: TenantKey, user: DemoUser) {
       deliveryPeriod: string;
       direction: "Buy" | "Sell";
       volume: number;
-      price: number;
+      price?: number;
       counterpartyId: string;
       cargoTerms?: { tolerancePct: number; laycanFrom: string; laycanTo: string };
+      indexPricing?: { indexCode: string; windowFrom: string; windowTo: string; premium: number };
     }) {
       return (await post<{ id: string }>("trades", body)).id;
     },
     async action(tradeId: string, action: "submit" | "approve" | "reject" | "deliver") {
       return post(`trades/${tradeId}/${action}`);
+    },
+    async curvePoint(commodityCode: string, deliveryPeriod: string, price: number) {
+      return post("curve-points", { commodityCode, deliveryPeriod, price });
+    },
+    async fixing(indexCode: string, fixingDate: string, value: number) {
+      return post(`indices/${indexCode}/fixings`, { fixingDate, value });
+    },
+    async get<T>(path: string): Promise<T> {
+      const response = await context.get(path);
+      if (!response.ok()) throw new Error(`GET ${path} → ${response.status()}`);
+      return (await response.json()) as T;
     },
     dispose: () => context.dispose(),
   };

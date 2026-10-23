@@ -32,6 +32,7 @@ import { ShipmentPanel } from "../shipments/ShipmentPanel";
 import { formatAmount, formatPrice, formatVolume } from "../../format/money";
 import { allowedActions, type UiTradeAction } from "./allowedActions";
 import { AmendModal } from "./AmendModal";
+import { PricingPanel } from "./PricingPanel";
 import { ApprovalCountdown } from "./ApprovalCountdown";
 import { creditPendingSince, diffHistory, type FieldChange } from "./historyDiff";
 import { StateDiagram } from "./StateDiagram";
@@ -58,9 +59,9 @@ function formatChangeValue(change: FieldChange, value: FieldChange["from"]): str
     case "actualVolume":
       return formatVolume(value as number | null);
     case "price":
-      return formatPrice(value as number);
+      return formatPrice(value as number | null);
     case "notional":
-      return formatAmount(value as number);
+      return formatAmount(value as number | null);
     default:
       return String(value);
   }
@@ -149,7 +150,11 @@ export function TradeDetailPage() {
               <Field label="Volume">
                 {formatVolume(trade.data.volume)} {unitOf(trade.data.commodityCode)}
               </Field>
-              <Field label="Price">{formatPrice(trade.data.price)}</Field>
+              <Field label="Price">
+                {trade.data.price == null && trade.data.pricing
+                  ? `${trade.data.pricing.indexCode} average`
+                  : formatPrice(trade.data.price)}
+              </Field>
               <Field label="Notional">{formatAmount(trade.data.notional)}</Field>
               <Field label="Counterparty">{counterpartyName(trade.data.counterpartyId)}</Field>
               <Field label="Last changed">{formatDateTime(trade.data.lastChangedAt)}</Field>
@@ -194,6 +199,8 @@ export function TradeDetailPage() {
               </Button>
             ))}
           </Group>
+
+          {trade.data.pricing && <PricingPanel trade={trade.data} />}
 
           {trade.data.cargoTerms && <ShipmentPanel trade={trade.data} />}
 

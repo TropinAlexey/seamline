@@ -1,5 +1,8 @@
 using System.Net.Http.Json;
 using Seamline.Modules.Identity.Contracts;
+using Seamline.Modules.Trading.Contracts;
+using Seamline.Modules.Trading.Internal;
+using Risk = Seamline.Modules.Risk.Internal;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -26,7 +29,9 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
         var cancelResponse = await client.PostAsync($"/trades/{trade.Id}/cancel", content: null);
         Assert.Equal(System.Net.HttpStatusCode.Accepted, cancelResponse.StatusCode);
 
-        var cancelled = await PollForTradeStateAsync(client, trade.Id, "Cancelled");
+        // The saga hands the cancellation back to Trading as a message.
+        await factory.Bus.Consumed<TradeApprovalCancelledConsumer, TradeApprovalCancelled>(m => m.TradeId == trade.Id);
+        var cancelled = (await client.GetFromJsonAsync<TradeStateDto>($"/trades/{trade.Id}"))!;
         Assert.Equal("Cancelled", cancelled.State);
 
         var positions = await client.GetPositionsAsync<PositionDto>();
@@ -50,7 +55,8 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
         var rejectResponse = await riskClient.PostAsync($"/trades/{trade.Id}/reject", content: null);
         Assert.Equal(System.Net.HttpStatusCode.Accepted, rejectResponse.StatusCode);
 
-        var rejected = await PollForTradeStateAsync(client, trade.Id, "Rejected");
+        await factory.Bus.Consumed<TradeApprovalCompletedConsumer, TradeApprovalCompleted>(m => m.TradeId == trade.Id);
+        var rejected = (await client.GetFromJsonAsync<TradeStateDto>($"/trades/{trade.Id}"))!;
         Assert.Equal("Rejected", rejected.State);
 
         var positions = await client.GetPositionsAsync<PositionDto>();
@@ -83,14 +89,16 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
         var submitResponse = await client.PostAsync($"/trades/{trade.Id}/submit", content: null);
         submitResponse.EnsureSuccessStatusCode();
 
-        await PollForSinglePositionAsync(client, expectedVolume: 100m);
+        await factory.Bus.Consumed<Risk.TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
 
         var amendResponse = await client.PostAsJsonAsync(
             $"/trades/{trade.Id}/amend", new { volume = 150m, price = 46m, reason = "Volume correction" });
         amendResponse.EnsureSuccessStatusCode();
 
-        var position = await PollForSinglePositionAsync(client, expectedVolume: 150m);
+        await factory.Bus.Consumed<Risk.TradeAmendedConsumer, TradeAmended>(m => m.TradeId == trade.Id);
+        var position = Assert.Single(await client.GetPositionsAsync<PositionDto>());
         Assert.Equal("POWER", position.CommodityCode);
+        Assert.Equal(150m, position.NetVolume);
     }
 
     private static async Task<CounterpartyDto> CreateCounterpartyAsync(HttpClient client, string name, decimal creditLimit)
@@ -114,34 +122,6 @@ public sealed class TradeLifecycleExtensionsTests(SeamlineApiFactory factory) : 
         });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<TradeIdDto>())!;
-    }
-
-    private static async Task<TradeStateDto> PollForTradeStateAsync(HttpClient client, Guid tradeId, string expectedState)
-    {
-        TradeStateDto? trade = null;
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            trade = await client.GetFromJsonAsync<TradeStateDto>($"/trades/{tradeId}");
-            if (trade!.State == expectedState)
-                return trade;
-            await Task.Delay(250);
-        }
-
-        return trade!;
-    }
-
-    private static async Task<PositionDto> PollForSinglePositionAsync(HttpClient client, decimal expectedVolume)
-    {
-        List<PositionDto>? positions = null;
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            positions = await client.GetPositionsAsync<PositionDto>();
-            if (positions is { Count: 1 } && positions[0].NetVolume == expectedVolume)
-                break;
-            await Task.Delay(250);
-        }
-
-        return Assert.Single(positions!);
     }
 
     private sealed record CounterpartyDto(Guid Id, string Name, decimal CreditLimit);

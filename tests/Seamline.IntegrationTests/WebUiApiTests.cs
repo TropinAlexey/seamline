@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Seamline.Modules.Identity.Contracts;
+using Seamline.Modules.Trading.Internal;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -141,7 +142,9 @@ public sealed class WebUiApiTests(SeamlineApiFactory factory) : IClassFixture<Se
 
         Assert.Equal(HttpStatusCode.Accepted, (await risk.PostAsync($"/trades/{trade.Id}/{decision}", content: null)).StatusCode);
 
-        var last = await PollForLastHistoryEntryAsync(trader, trade.Id, expectedState);
+        // The saga hands the decision back to Trading as a message.
+        await factory.Bus.Consumed<TradeApprovalCompletedConsumer, TradeApprovalCompleted>(m => m.TradeId == trade.Id);
+        var last = (await trader.GetFromJsonAsync<List<HistoryDto>>($"/trades/{trade.Id}/history"))![^1];
         Assert.Equal(expectedState, last.State);
         Assert.Equal(riskLogin, last.ChangedBy);
     }
@@ -188,21 +191,6 @@ public sealed class WebUiApiTests(SeamlineApiFactory factory) : IClassFixture<Se
             var response = await client.PostAsJsonAsync("/auth/login", new { tenantId = Guid.Parse(tenantId), login, password = "Demo-Password-123!" });
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
-    }
-
-    private static async Task<HistoryDto> PollForLastHistoryEntryAsync(HttpClient client, Guid tradeId, string expectedState)
-    {
-        HistoryDto? last = null;
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            var history = await client.GetFromJsonAsync<List<HistoryDto>>($"/trades/{tradeId}/history");
-            last = history![^1];
-            if (last.State == expectedState)
-                return last;
-            await Task.Delay(250);
-        }
-
-        return last!;
     }
 
     private static async Task<CounterpartyDto> CreateCounterpartyAsync(HttpClient client, string name, decimal creditLimit)

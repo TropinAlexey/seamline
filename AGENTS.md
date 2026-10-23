@@ -9,22 +9,23 @@ Multi-tenant mini-CTRM (power/gas forwards) на .NET 10 — модульный 
 (Valuation, Reporting). Postgres (схема на модуль + RLS), MassTransit 8.5.10
 (InMemory локально/тесты, RabbitMQ dev, ServiceBus в Azure), Hangfire для EOD.
 Тонкий web UI (React 19 + Mantine, `web/`) за same-origin прокси `/api`.
-Честно: сейчас это ETRM-ядро; CTRM-процессы (уголь-карго, формульная цена,
-хранилище газа) специфицированы, но не реализованы — `docs/ctrm-gap-analysis.md`.
+Честно: ETRM-ядро + уголь-карго с фиксированной или формульной ценой;
+хранилище газа пока только специфицировано — `docs/ctrm-gap-analysis.md`.
 4 таргета деплоя: docker compose, k3d+Helm, AWS ECS (Terraform), Azure CA (Bicep).
 
 ## Текущий статус (2026-10-23, ветка `main`)
 - **Фазы 1–5 завершены, Фаза 6 (Web UI) — Phase A и B закоммичены.** Phase C
   (SignalR) и D (облачный деплой web) — вне скоупа, пока не попросят.
-- **Фаза 7 (CTRM):** ADR-0032…0037, `docs/specs/00–03`, gap analysis.
-  Шаги 1 (справочник товаров) и 2 (уголь-карго, ADR-0034 + 0037) реализованы;
-  3 (формульная цена) и 4 (хранилище газа) специфицированы. 37 ADR.
-- Тесты: 282 .NET (128 unit + 69 arch + 85 integration) + web 29 unit (Vitest)
-  + 13 E2E (Playwright против compose).
+- **Фаза 7 (CTRM):** ADR-0032…0038, `docs/specs/00–03`, gap analysis.
+  Шаги 1 (справочник товаров), 2 (уголь-карго, ADR-0034 + 0037) и 3
+  (формульная цена, ADR-0035 + 0038) реализованы; 4 (хранилище газа)
+  специфицирован. 39 ADR.
+- Тесты: 313 .NET (149 unit + 69 arch + 95 integration) + web 29 unit (Vitest)
+  + 14 E2E (Playwright против compose).
 - CI — 4 job-ы, все зелёные: `build-and-test`, `api-contract` (OpenAPI не
   устарел), `web` (lint/format/typecheck/unit/build, TS-клиент == OpenAPI),
   `e2e` (compose с нуля + seed + Playwright, только push в main).
-- Последний коммит — Фаза 7, шаг 2 (уголь-карго).
+- Последний коммит — Фаза 7, шаг 3 (формульная цена) + ADR-0039 (тесты ждут консьюмера).
 
 ## Что сделано последним (хронология)
 1. `d37719a` — бэкенд под UI: read-эндпоинты (blotter, history, exposure,
@@ -51,12 +52,28 @@ Multi-tenant mini-CTRM (power/gas forwards) на .NET 10 — модульный 
    ActualVolume, `/shipments`, Invoice Provisional/Final с балансом, Risk
    закрывает ContractVolume, REMIT пропускает уголь, сид COAL, seed-скрипт
    с примером из спеки, UI: панель Shipment, страница Shipments.
+9. Фаза 7, шаг 3: формульная цена. ADR-0038 — события фиксинга нет (outbox
+   только у Trading), финальную цену подтверждает BO (`/trades/{id}/fix-price`);
+   расчёт только в Risk (`IFormulaPricingService`), фиксинги append-only в
+   MarketData (`IIndexFixingDirectory`), FormulaTrade в Risk вне позиции,
+   EOD/стресс по сделке, финальный счёт — по тому из двух событий, которое
+   Trading снабдил обеими половинами. Сид: пример spec 03; сид ждёт окно
+   rate limit (6 логинов при лимите 5/мин — баг с шага 2).
+10. ADR-0039: интеграционные тесты ждут не таймер, а консьюмера
+    (`ConsumeSignals` + `WaitUntilStarted`); убраны все 20 циклов опроса.
+    Причина — флейк TradeToPositionTests под полным прогоном решения.
+11. Ревью шага 3 (стандарты + spec), всё исправлено: гонка certify/fix-price
+    (финальный счёт мог не появиться) — блокировка строки сделки
+    (`TradeRowLock`), тест воспроизводил баг без неё; синтетический ряд
+    фиксингов в импорте кривой (как в ADR-0035); `/pricing-exposure` только
+    FO/MO; notional от неокруглённой цены; дубли выбора цены и округления
+    в Risk; тип `CargoCertificate`; `formulaFinalPrice`/`confirmedPrice`;
+    проект `Seamline.Modules.Settlement.Tests`.
 
 ## Что дальше (приоритет сверху вниз)
-1. [ ] Фаза 7, шаг 3: формульная цена (spec 03, ADR-0035) — fixings в
-       MarketData, PricingTerms на сделке, expected price в Risk, финальный
-       счёт ждёт и сертификат, и k = N. Затем хранилище газа (02).
-       После каждого шага — перенести строку в README из «specified» в
+1. [ ] Фаза 7, шаг 4: хранилище газа (spec 02, ADR-0036). Сначала сверить
+       ADR-0036 с уроком ADR-0037/0038: откуда публикуются события (outbox
+       только у Trading). После шага — перенести строку в README из «specified» в
        «implemented», обновить gap analysis и CLAUDE.md Scope boundaries.
 2. [ ] Утренняя проверка: `dotnet build SeamlineCtrm.sln && dotnet test SeamlineCtrm.sln`,
        `gh run list --limit 3` — последний push зелёный.
@@ -80,11 +97,11 @@ dotnet test SeamlineCtrm.sln
 docker compose up -d && dotnet run tools/seed/seed.cs   # UI на http://localhost:8081
 cd web && npm run e2e                                   # Playwright против стека
 ```
-Демо: тур по UI (7 шагов) и 5 curl-ов — в README («Web UI», «Quick demo»).
+Демо: тур по UI (9 шагов) и 5 curl-ов — в README («Web UI», «Quick demo»).
 
 ## Где что лежит
 - Правила модулей: `CLAUDE.md` (обязательно к соблюдению, проверяется ArchTests в CI).
-- Решения: `docs/adr/` (37 шт), спеки CTRM — `docs/specs/`. Начать с 0001 (монолит), 0008 (saga),
+- Решения: `docs/adr/` (39 шт), спеки CTRM — `docs/specs/`. Начать с 0001 (монолит), 0008 (saga),
   0005 (multi-tenancy), 0030 (web UI).
 - Ежедневные логи: `.remember/today-*.done.md`, сводка — `.remember/recent.md`.
 - API: `src/Seamline.Api`, модули: `src/Modules/`, воркеры: `src/Seamline.*.Worker/`.

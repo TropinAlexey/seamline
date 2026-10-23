@@ -44,7 +44,8 @@ internal static class AuthTestHelper
             // Each test runs in its own random tenant, so it gets the same
             // commodities the AddCommodity and SeedCoalCommodity migrations
             // seed for the demo tenants (ADR-0033, ADR-0034) — otherwise
-            // every POST /trades would be 400.
+            // every POST /trades would be 400 — and the coal index of
+            // AddPriceIndices (ADR-0035).
             await using var commodities = connection.CreateCommand();
             commodities.CommandText = """
                 INSERT INTO reference.commodity ("Id", tenant_id, code, name, unit, delivery_model)
@@ -55,6 +56,9 @@ internal static class AuthTestHelper
                     ("Id", tenant_id, code, name, unit, delivery_model,
                      base_nar_kcal_kg, reject_below_nar_kcal_kg, max_sulphur_pct, max_ash_pct)
                 VALUES (gen_random_uuid(), @tenantId, 'COAL', 'Steam coal', 2, 2, 6000.0, 5700.0, 1.00, 16.00)
+                ON CONFLICT (tenant_id, code) DO NOTHING;
+                INSERT INTO marketdata.price_index ("Id", tenant_id, code, commodity_code, name)
+                VALUES (gen_random_uuid(), @tenantId, 'COAL-IDX', 'COAL', 'Synthetic coal index (demo)')
                 ON CONFLICT (tenant_id, code) DO NOTHING;
                 """;
             commodities.Parameters.AddWithValue("tenantId", tenantId);

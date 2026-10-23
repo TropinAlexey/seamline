@@ -8,6 +8,7 @@ COPY src/Modules/Trading/Seamline.Modules.Trading.Contracts/*.csproj src/Modules
 COPY src/Modules/Reference/Seamline.Modules.Reference.Contracts/*.csproj src/Modules/Reference/Seamline.Modules.Reference.Contracts/
 COPY src/Modules/Identity/Seamline.Modules.Identity.Contracts/*.csproj src/Modules/Identity/Seamline.Modules.Identity.Contracts/
 COPY src/Modules/Risk/Seamline.Modules.Risk.Contracts/*.csproj src/Modules/Risk/Seamline.Modules.Risk.Contracts/
+COPY src/Modules/MarketData/Seamline.Modules.MarketData.Contracts/*.csproj src/Modules/MarketData/Seamline.Modules.MarketData.Contracts/
 RUN dotnet restore src/Seamline.Reporting.Worker/Seamline.Reporting.Worker.csproj
 
 COPY src/ src/

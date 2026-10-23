@@ -45,5 +45,6 @@ public static class AuditModuleExtensions
         configurator.AddConsumer<CargoNominatedAuditConsumer>();
         configurator.AddConsumer<CargoQualityCertifiedAuditConsumer>();
         configurator.AddConsumer<CargoQualityRejectedAuditConsumer>();
+        configurator.AddConsumer<TradePriceFixedAuditConsumer>();
     }
 }

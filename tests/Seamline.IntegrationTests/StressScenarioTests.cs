@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using Npgsql;
 using Seamline.Modules.Identity.Contracts;
 using Seamline.Modules.Risk.Internal;
+using Seamline.Modules.Trading.Contracts;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -23,14 +24,16 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
         var counterparty = await CreateCounterpartyAsync(client, "Acme Energy", 1_000_000m);
         var trade = await CreateTradeAsync(client, "POWER", "2028-02", "Buy", 100m, 40m, counterparty.Id);
         (await client.PostAsync($"/trades/{trade.Id}/submit", content: null)).EnsureSuccessStatusCode();
-        await PollForSinglePositionAsync(client);
+        await factory.Bus.Consumed<TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
 
         (await marketDataClient.PostAsJsonAsync("/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2028-02", price = 40m }))
             .EnsureSuccessStatusCode();
 
         await factory.Services.RunEndOfDayValuationAsync(CancellationToken.None);
 
-        var rows = await PollForStressRowsAsync(tenantId, "POWER", "2028-02", expectedCount: 4);
+        // The EOD run is awaited directly: nothing asynchronous left to wait for.
+        var rows = await FetchStressRowsAsync(tenantId, "POWER", "2028-02");
+        Assert.Equal(4, rows.Count);
 
         // Flat ±10%: shocked price 44 / 36, MtM = (price - 40) * 100.
         AssertRow(rows, "FlatShock", 10m, 44m, 400m);
@@ -52,10 +55,10 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
         var counterparty = await CreateCounterpartyAsync(client, "Bravo Trading", 1_000_000m);
         var trade = await CreateTradeAsync(client, "GAS", "2028-03", "Buy", 50m, 20m, counterparty.Id);
         (await client.PostAsync($"/trades/{trade.Id}/submit", content: null)).EnsureSuccessStatusCode();
-        await PollForSinglePositionAsync(client);
+        await factory.Bus.Consumed<TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
 
         (await client.PostAsync($"/trades/{trade.Id}/deliver", content: null)).EnsureSuccessStatusCode();
-        await PollForFlatPositionAsync(client, "GAS", "2028-03");
+        await factory.Bus.Consumed<TradeDeliveredConsumer, TradeDelivered>(m => m.TradeId == trade.Id);
 
         await marketDataClient.PostAsJsonAsync("/curve-points/", new { commodityCode = "GAS", deliveryPeriod = "2028-03", price = 25m });
 
@@ -95,47 +98,6 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
         return (await response.Content.ReadFromJsonAsync<TradeIdDto>())!;
     }
 
-    private static async Task PollForSinglePositionAsync(HttpClient client)
-    {
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            var positions = await client.GetPositionsAsync<PositionDto>();
-            if (positions is { Count: 1 })
-                return;
-            await Task.Delay(250);
-        }
-
-        Assert.Fail("No position appeared within the poll window.");
-    }
-
-    private static async Task PollForFlatPositionAsync(HttpClient client, string commodityCode, string deliveryPeriod)
-    {
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            var positions = await client.GetPositionsAsync<PositionDto>();
-            var match = positions?.FirstOrDefault(p => p.CommodityCode == commodityCode && p.DeliveryPeriod == deliveryPeriod);
-            if (match is null or { NetVolume: 0m })
-                return;
-            await Task.Delay(250);
-        }
-
-        Assert.Fail($"Position for {commodityCode}/{deliveryPeriod} never nettled back to zero within the poll window.");
-    }
-
-    private async Task<List<StressRow>> PollForStressRowsAsync(Guid tenantId, string commodityCode, string deliveryPeriod, int expectedCount)
-    {
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            var rows = await FetchStressRowsAsync(tenantId, commodityCode, deliveryPeriod);
-            if (rows.Count >= expectedCount)
-                return rows;
-            await Task.Delay(250);
-        }
-
-        Assert.Fail($"Fewer than {expectedCount} stress_scenario_result rows appeared for {commodityCode}/{deliveryPeriod} within the poll window.");
-        return default!; // unreachable — Assert.Fail throws
-    }
-
     private async Task<List<StressRow>> FetchStressRowsAsync(Guid tenantId, string commodityCode, string deliveryPeriod)
     {
         await using var connection = new NpgsqlConnection(factory.ConnectionString);
@@ -162,8 +124,6 @@ public sealed class StressScenarioTests(SeamlineApiFactory factory) : IClassFixt
     private sealed record CounterpartyDto(Guid Id, string Name, decimal CreditLimit);
 
     private sealed record TradeIdDto(Guid Id);
-
-    private sealed record PositionDto(string CommodityCode, string DeliveryPeriod, decimal NetVolume);
 
     private sealed record StressRow(string ScenarioType, decimal ShockPercentage, decimal ShockedPrice, decimal MtmAmount);
 }

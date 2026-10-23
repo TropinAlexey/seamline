@@ -7,6 +7,7 @@ import {
   Paper,
   Stack,
   Table,
+  Tabs,
   Text,
   TextInput,
   Title,
@@ -18,6 +19,7 @@ import { errorMessage, notifySuccess } from "../../components/notify";
 import { QueryState } from "../../components/QueryState";
 import { formatDateTime } from "../../format/date";
 import { formatPrice } from "../../format/money";
+import { FixingsPanel } from "./FixingsPanel";
 
 // Middle office moves a price here and watches live MtM change on
 // Positions — the quickest way to see the risk read model react.
@@ -87,13 +89,32 @@ function UpsertCurvePointForm({ commodities }: { commodities: string[] }) {
 }
 
 export function CurvesPage() {
+  return (
+    <Stack>
+      <Title order={2}>Market data</Title>
+      <Tabs defaultValue="curve" keepMounted={false}>
+        <Tabs.List>
+          <Tabs.Tab value="curve">Forward curve</Tabs.Tab>
+          <Tabs.Tab value="fixings">Index fixings</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="curve" pt="md">
+          <ForwardCurve />
+        </Tabs.Panel>
+        <Tabs.Panel value="fixings" pt="md">
+          <FixingsPanel />
+        </Tabs.Panel>
+      </Tabs>
+    </Stack>
+  );
+}
+
+function ForwardCurve() {
   const session = useSession();
   const curve = useCurvePoints();
   const commodities = [...new Set((curve.data ?? []).map((p) => p.commodityCode))];
 
   return (
     <Stack>
-      <Title order={2}>Market data</Title>
       <Text size="sm" c="dimmed">
         Forward curve: one flat price per commodity and delivery month. The curve-import job
         refreshes the current month daily; middle office can publish any point.

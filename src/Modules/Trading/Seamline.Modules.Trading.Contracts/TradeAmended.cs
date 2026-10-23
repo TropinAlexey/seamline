@@ -7,7 +7,9 @@ namespace Seamline.Modules.Trading.Contracts;
 // recomputing the position from scratch. OldPrice rides along (ADR-0014,
 // Valuation.Worker) so Position's weighted-average cost basis can back out
 // the trade's old contribution before applying the new one; a delta alone
-// isn't enough for a weighted average the way it is for NetVolume.
+// isn't enough for a weighted average the way it is for NetVolume. Both
+// prices are null for an index-priced trade that has not fixed yet, whose
+// amendment changes volume only (ADR-0035).
 public sealed record TradeAmended(
     Guid TradeId,
     Guid TenantId,
@@ -16,8 +18,8 @@ public sealed record TradeAmended(
     TradeDirection Direction,
     decimal OldVolume,
     decimal NewVolume,
-    decimal OldPrice,
-    decimal NewPrice,
+    decimal? OldPrice,
+    decimal? NewPrice,
     Guid CounterpartyId,
     string Actor,
     string Reason);

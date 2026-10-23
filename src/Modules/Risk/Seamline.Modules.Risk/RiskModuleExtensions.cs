@@ -17,6 +17,8 @@ public static class RiskModuleExtensions
                     npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", RiskDbContext.Schema))
                 .AddInterceptors(sp.GetRequiredService<TenantSessionVariableInterceptor>()));
 
+        services.AddScoped<FormulaPricingService>();
+        services.AddScoped<IFormulaPricingService>(sp => sp.GetRequiredService<FormulaPricingService>());
         services.AddScoped<CreditExposureCalculator>();
         services.AddScoped<ICreditReservationService, CreditReservationService>();
 
@@ -42,6 +44,7 @@ public static class RiskModuleExtensions
         configurator.AddConsumer<TradeActivatedConsumer>();
         configurator.AddConsumer<TradeAmendedConsumer>();
         configurator.AddConsumer<TradeDeliveredConsumer>();
+        configurator.AddConsumer<TradePriceFixedConsumer>();
     }
 
     // Entry point Valuation.Worker calls (ADR-0002, ADR-0014) — the actual

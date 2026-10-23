@@ -23,6 +23,49 @@ namespace Seamline.Modules.MarketData.Internal.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Seamline.Modules.MarketData.Internal.IndexFixing", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("FixingDate")
+                        .HasColumnType("date")
+                        .HasColumnName("fixing_date");
+
+                    b.Property<string>("IndexCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("index_code");
+
+                    b.Property<DateTimeOffset>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<string>("PublishedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("published_by");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "IndexCode", "FixingDate")
+                        .IsUnique();
+
+                    b.ToTable("index_fixing", "marketdata");
+                });
+
             modelBuilder.Entity("Seamline.Modules.MarketData.Internal.PriceCurvePoint", b =>
                 {
                     b.Property<Guid>("Id")
@@ -60,6 +103,42 @@ namespace Seamline.Modules.MarketData.Internal.Migrations
                         .IsUnique();
 
                     b.ToTable("price_curve_point", "marketdata");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.MarketData.Internal.PriceIndex", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("CommodityCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("commodity_code");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("price_index", "marketdata");
                 });
 #pragma warning restore 612, 618
         }

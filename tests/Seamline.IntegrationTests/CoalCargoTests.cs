@@ -1,6 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using Seamline.Modules.Identity.Contracts;
+using Seamline.Modules.Trading.Contracts;
+using Audit = Seamline.Modules.Audit.Internal;
+using Risk = Seamline.Modules.Risk.Internal;
+using Settlement = Seamline.Modules.Settlement.Internal;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -20,7 +24,8 @@ public sealed class CoalCargoTests(SeamlineApiFactory factory) : IClassFixture<S
         var trader = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
         var ops = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.BackOffice);
         var tradeId = await BookActiveCoalTradeAsync(trader);
-        await PollAsync(() => trader.GetPositionsAsync<PositionDto>(), p => p.Any(x => x.CommodityCode == "COAL" && x.NetVolume == 75_000m));
+        await factory.Bus.Consumed<Risk.TradeActivatedConsumer, TradeActivated>(m => m.TradeId == tradeId);
+        Assert.Contains(await trader.GetPositionsAsync<PositionDto>(), p => p.CommodityCode == "COAL" && p.NetVolume == 75_000m);
 
         (await ops.PostAsJsonAsync($"/shipments/{tradeId}/nominate", new { vesselName = "MV Demo Carrier", imo = "9876543", eta = "2027-03-12" }))
             .EnsureSuccessStatusCode();
@@ -34,22 +39,24 @@ public sealed class CoalCargoTests(SeamlineApiFactory factory) : IClassFixture<S
         var trade = (await trader.GetFromJsonAsync<TradeDto>($"/trades/{tradeId}"))!;
         Assert.Equal(("Delivered", 75_000m, 78_500m), (trade.State, trade.Volume, trade.ActualVolume));
 
-        var provisional = Assert.Single(await PollInvoicesAsync(ops, tradeId, 1));
+        await factory.Bus.Consumed<Settlement.TradeDeliveredConsumer, TradeDelivered>(m => m.TradeId == tradeId);
+        var provisional = Assert.Single(await InvoicesAsync(ops, tradeId));
         Assert.Equal(("Provisional", 78_500m, 110m, 8_635_000.00m), (provisional.Kind, provisional.Quantity, provisional.UnitPrice, provisional.Amount));
 
         var certified = await ops.PostAsJsonAsync($"/shipments/{tradeId}/certify",
             new { measuredNarKcalKg = 5_920.0m, sulphurPct = 0.85m, ashPct = 14.20m });
         Assert.Equal("QualityCertified", (await certified.Content.ReadFromJsonAsync<ShipmentDto>())!.State);
 
-        var final = (await PollInvoicesAsync(ops, tradeId, 2)).Single(i => i.Kind == "Final");
+        await factory.Bus.Consumed<Settlement.CargoQualityCertifiedConsumer, CargoQualityCertified>(m => m.TradeId == tradeId);
+        var final = (await InvoicesAsync(ops, tradeId)).Single(i => i.Kind == "Final");
         Assert.Equal(108.5333m, final.UnitPrice);         // 110 × 5,920 / 6,000, rounded to 4 dp
         Assert.Equal(8_519_864.05m, final.Amount);        // 78,500 × 108.5333
         Assert.Equal(-115_135.95m, final.Balance);        // owed back to the buyer
 
         // The position opened on 75,000 t is closed on 75,000 t, not on the
         // loaded 78,500 t.
-        var positions = await PollAsync(() => trader.GetPositionsAsync<PositionDto>(), p => p.All(x => x.CommodityCode != "COAL"));
-        Assert.DoesNotContain(positions, p => p.CommodityCode == "COAL");
+        await factory.Bus.Consumed<Risk.TradeDeliveredConsumer, TradeDelivered>(m => m.TradeId == tradeId);
+        Assert.DoesNotContain(await trader.GetPositionsAsync<PositionDto>(), p => p.CommodityCode == "COAL");
     }
 
     [Fact]
@@ -89,13 +96,16 @@ public sealed class CoalCargoTests(SeamlineApiFactory factory) : IClassFixture<S
         var tradeId = await BookActiveCoalTradeAsync(trader);
         await NominateAsync(ops, tradeId);
         (await ops.PostAsJsonAsync($"/shipments/{tradeId}/load", new { blQuantity = 75_000m, blDate = "2027-03-14" })).EnsureSuccessStatusCode();
-        await PollInvoicesAsync(ops, tradeId, 1);
+        await factory.Bus.Consumed<Settlement.TradeDeliveredConsumer, TradeDelivered>(m => m.TradeId == tradeId);
 
         var response = await ops.PostAsJsonAsync($"/shipments/{tradeId}/certify",
             new { measuredNarKcalKg = 5_920.0m, sulphurPct = 1.20m, ashPct = 14.20m });
 
         Assert.Equal("QualityRejected", (await response.Content.ReadFromJsonAsync<ShipmentDto>())!.State);
-        await Task.Delay(1_000);
+        // Proving an absence: once Audit has the rejection, the event has
+        // been delivered, and Settlement has no consumer that could turn it
+        // into a final invoice.
+        await factory.Bus.Consumed<Audit.CargoQualityRejectedAuditConsumer, CargoQualityRejected>(m => m.TradeId == tradeId);
         var invoice = Assert.Single(await ops.GetFromJsonAsync<List<InvoiceDto>>($"/invoices?tradeId={tradeId}") ?? []);
         Assert.Equal("Provisional", invoice.Kind);
     }
@@ -155,9 +165,10 @@ public sealed class CoalCargoTests(SeamlineApiFactory factory) : IClassFixture<S
         (await ops.PostAsJsonAsync($"/shipments/{tradeId}/certify", new { measuredNarKcalKg = 6_000m, sulphurPct = 0.5m, ashPct = 10m }))
             .EnsureSuccessStatusCode();
 
-        var page = await PollAsync(
-            async () => (await ops.GetFromJsonAsync<AuditPageDto>($"/audit-events?entityId={tradeId}&pageSize=50"))!,
-            p => p.Items.Any(e => e.Action == "CargoQualityCertified"));
+        await factory.Bus.Consumed<Audit.CargoNominatedAuditConsumer, CargoNominated>(m => m.TradeId == tradeId);
+        await factory.Bus.Consumed<Audit.TradeDeliveredAuditConsumer, TradeDelivered>(m => m.TradeId == tradeId);
+        await factory.Bus.Consumed<Audit.CargoQualityCertifiedAuditConsumer, CargoQualityCertified>(m => m.TradeId == tradeId);
+        var page = (await ops.GetFromJsonAsync<AuditPageDto>($"/audit-events?entityId={tradeId}&pageSize=50"))!;
 
         Assert.Contains(page.Items, e => e.Action == "CargoNominated" && e.Actor == opsLogin);
         Assert.Contains(page.Items, e => e.Action == "TradeDelivered" && e.Actor == opsLogin);
@@ -198,20 +209,8 @@ public sealed class CoalCargoTests(SeamlineApiFactory factory) : IClassFixture<S
             cargoTerms
         });
 
-    private static Task<List<InvoiceDto>> PollInvoicesAsync(HttpClient ops, Guid tradeId, int count) =>
-        PollAsync(async () => (await ops.GetFromJsonAsync<List<InvoiceDto>>($"/invoices?tradeId={tradeId}"))!, i => i.Count == count);
-
-    private static async Task<T> PollAsync<T>(Func<Task<T>> read, Func<T, bool> done)
-    {
-        var value = await read();
-        for (var attempt = 0; attempt < 60 && !done(value); attempt++)
-        {
-            await Task.Delay(250);
-            value = await read();
-        }
-        Assert.True(done(value), "Condition not reached within the poll window.");
-        return value;
-    }
+    private static async Task<List<InvoiceDto>> InvoicesAsync(HttpClient ops, Guid tradeId) =>
+        (await ops.GetFromJsonAsync<List<InvoiceDto>>($"/invoices?tradeId={tradeId}"))!;
 
     private sealed record IdDto(Guid Id);
 

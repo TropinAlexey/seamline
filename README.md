@@ -24,17 +24,18 @@ _mini SaaS CTRM demo project_
 <br clear="left"/>
 
 Multi-tenant commodity trading & risk platform on .NET 10: an ETRM core
-for power and gas forwards plus the first physical CTRM process, **coal
+for power and gas forwards plus physical CTRM processes for **coal
 cargoes** (vessel nomination, B/L quantity within a tolerance, quality-
-adjusted provisional and final invoices). Formula pricing and gas storage
-are **specified, not yet implemented**. See the
+adjusted provisional and final invoices), fixed-price or **index-priced**
+(average of daily fixings plus a premium, with fixed vs unfixed exposure).
+Gas storage is **specified, not yet implemented**. See the
 [CTRM gap analysis](docs/ctrm-gap-analysis.md).
 Modular monolith with boundaries enforced in CI, two services extracted on
 purpose, four deploy targets (docker compose, local k8s via Helm, AWS ECS
 via Terraform, Azure Container Apps via Bicep).
 
 **Phases 1–6 complete** (Phase 6: web UI), Phase 7 (CTRM) in progress.
-282 .NET tests plus web unit and E2E suites, 37 ADRs, one pipeline to both
+313 .NET tests plus web unit and E2E suites, 39 ADRs, one pipeline to both
 clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
@@ -118,6 +119,8 @@ formats.
 
 ![Coal cargo: tolerance band and laycan, vessel, bill of lading and certificate; the provisional invoice at loading and the quality-adjusted final with its balance](docs/images/web-ui-coal-cargo.png)
 
+![Index-priced coal: 10 of 23 pricing days fixed, the expected price against the forward, and the fixed vs unfixed quantity](docs/images/web-ui-formula-pricing.png)
+
 ```bash
 docker compose up -d                 # includes the `web` service
 dotnet run tools/seed/seed.cs        # counterparties, curve points, trades in every state
@@ -169,6 +172,14 @@ fill on the login page:
    8,519,864.05 after the NAR adjustment, balance −115,135.95. Open the
    one awaiting nomination and take it through **Nominate vessel** →
    **Record loading** (this delivers the trade) → **Record certificate**.
+9. The index-priced coal trade (Buy COAL 2027-03 at the March average of
+   `COAL-IDX` plus 1.5000) shows the worked example of
+   [spec 03](docs/specs/03-formula-pricing.md) in its **Pricing** panel:
+   10 of 23 days fixed, expected price 106.7174, 32,608.696 t fixed. On
+   **Positions & MTM** it is listed under *Index-priced trades* with MtM
+   −53,804.35, carried by the fixed share only. As `risk`, publish more
+   fixings in **Market data → Index fixings**; once all 23 days are in, back
+   office confirms the final price with **Fix price**.
 
 The OpenAPI document is generated on every API build into
 `web/openapi/seamline.json` and committed; the TypeScript client types are
@@ -201,7 +212,7 @@ CP_ID=$(curl -s http://localhost:5000/counterparties/ \
 # 3. Book a power forward: buy 100 MWh for Jan 2027 at 85 €/MWh
 TRADE_ID=$(curl -s http://localhost:5000/trades/ \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"commodityCode\":\"POWER\",\"deliveryPeriod\":\"2027-01\",\"direction\":0,\"volume\":100,\"price\":85,\"counterpartyId\":\"$CP_ID\"}" \
+  -d "{\"commodityCode\":\"POWER\",\"deliveryPeriod\":\"2027-01\",\"direction\":\"Buy\",\"volume\":100,\"price\":85,\"counterpartyId\":\"$CP_ID\"}" \
   | jq -r '.id')
 
 # → 201  {"id":"<guid>"}
@@ -241,7 +252,7 @@ curl -s http://localhost:5000/positions \
 ```mermaid
 graph TB
     subgraph api["Seamline.Api — modular monolith"]
-        TRD["Trading\ntrade capture + lifecycle"]
+        TRD["Trading\ntrade capture + lifecycle,\ncargo shipments"]
         REF["Reference\ncounterparties, commodities"]
         RSK["Risk\npositions, credit exposure"]
         MKT["MarketData\nforward curves"]
@@ -255,11 +266,13 @@ graph TB
         RPT["Reporting.Worker\nEOD REMIT batch"]
     end
 
-    TRD -- "TradeActivated\nTradeAmended" --> RSK
-    TRD -- "TradeDelivered" --> STL
-    TRD -- "TradeActivated\nTradeRejected" --> AUD
-    TRD -. "ICounterpartyDirectory" .-> REF
-    RSK -. "ICurvePointDirectory" .-> MKT
+    TRD -- "TradeActivated\nTradeAmended\nTradePriceFixed" --> RSK
+    TRD -- "TradeDelivered\nCargoQualityCertified\nTradePriceFixed" --> STL
+    TRD -- "every lifecycle\nand cargo event" --> AUD
+    TRD -. "ICounterpartyDirectory\nICommodityDirectory" .-> REF
+    TRD -. "IFormulaPricingService" .-> RSK
+    TRD -. "IIndexFixingDirectory" .-> MKT
+    RSK -. "ICurvePointDirectory\nIIndexFixingDirectory" .-> MKT
 
     VAL --> RSK
     VAL --> MKT
@@ -302,11 +315,14 @@ for what each worker computes.
 
 Implemented today:
 
-- Physical forwards only, power and gas. No options.
+- Physical forwards only. Power and gas are flow commodities; coal is a
+  cargo commodity (below). No options.
 - Commodities are master data ([ADR-0033](docs/adr/0033-commodity-master-data.md)):
   each has a unit (MWh or tonne) and a delivery model (flow or cargo).
   A trade on an unknown commodity is rejected. One currency, EUR.
-- Monthly delivery periods only.
+- Monthly delivery periods for positions, curves and valuation. A coal
+  cargo's laycan dates and an index trade's pricing window sit inside its
+  month.
 - Mark-to-market: `(forward_price − trade_price) × volume`. Flat monthly
   curve points — no interpolation, shaping, or cascading.
 - No VaR. Stress scenarios instead ([ADR-0016](docs/adr/0016-stress-scenarios.md)):
@@ -319,10 +335,8 @@ Implemented today:
   key lives in `appsettings.json` as a static dev-only secret, not a real
   secrets store — fine for a local/demo project, explicitly not a
   production posture. Three demo users (one per FO/MO/BO role) are seeded
-  by the `Identity` module's `InitialCreate` migration with a documented
-  password (`Demo-Password-123!`) for a fixed demo tenant
-  (`11111111-1111-1111-1111-111111111111`).
-
+  by `Identity` migrations with a documented password
+  (`Demo-Password-123!`) for each of the two demo tenants.
 - Coal cargoes ([spec 01](docs/specs/01-coal-cargo.md),
   [ADR-0034](docs/adr/0034-coal-cargo-logistics.md),
   [ADR-0037](docs/adr/0037-shipment-lives-in-trading.md)):
@@ -331,16 +345,28 @@ Implemented today:
   - the B/L quantity must sit within the contract tolerance, and recording
     it delivers the trade;
   - the quality certificate adjusts the price pro rata to calorific value
-    and settles the provisional invoice with a final one.
-  - No freight, demurrage, part-cargoes or claims workflow. Coal is not a
+    and settles the provisional invoice with a final one;
+  - no freight, demurrage, part-cargoes or claims workflow. Coal is not a
     REMIT product and is never reported.
+- Formula pricing for coal ([spec 03](docs/specs/03-formula-pricing.md),
+  [ADR-0035](docs/adr/0035-formula-pricing.md),
+  [ADR-0038](docs/adr/0038-price-fixing-is-confirmed-in-trading.md)):
+  - the average of a synthetic index (`COAL-IDX`) over a pricing window,
+    plus a premium; pricing days are weekdays (no holiday calendar);
+  - daily fixings are append-only and never corrected: the daily curve
+    import publishes a deterministic synthetic value, and middle office can
+    publish any weekday by hand;
+  - Risk computes the expected price, fixed vs unfixed quantity, and MtM and
+    stress per trade (only the fixed share carries price risk);
+  - once every day has fixed, back office confirms the final price, which
+    feeds the final invoice; the provisional invoice uses the expected price
+    of the loading day;
+  - power and gas stay fixed-price (REMIT's price-formula fields are not
+    modelled).
 
 Specified, not yet implemented ([ADR-0032](docs/adr/0032-ctrm-scope.md);
 these lines move up into "implemented" only when the code and tests exist):
 
-- [Formula pricing](docs/specs/03-formula-pricing.md): index average over a
-  pricing window plus premium, append-only daily fixings, fixed vs unfixed
-  exposure. Coal only; no holiday calendars or fixing corrections.
 - [Gas storage](docs/specs/02-gas-storage.md): capacity and daily rate
   limits, an append-only movement ledger, stock at WACOG valued in the EOD
   run. No capacity trading or ratchets.
@@ -374,7 +400,10 @@ transition.
 | `POST` | `/trades/{id}/amend` | FO | Amend active trade (new version) |
 | `POST` | `/trades/{id}/deliver` | FO | Mark trade as delivered |
 | `POST` | `/trades/{id}/cancel` | FO | Cancel trade (`202` from `CreditPending`) |
+| `GET` | `/trades/{id}/pricing` | any | Index-priced trade: k of N days fixed, average fixing, forward, expected price, fixed/unfixed quantity, final price |
+| `POST` | `/trades/{id}/fix-price` | BO | Confirm the final price once every pricing day has fixed (409 before) |
 | `GET` | `/positions` | any | Open positions with live MtM (server-computed) → `{ items, totalMtm }` |
+| `GET` | `/pricing-exposure` | FO, MO | Open index-priced trades, valued per trade: fixed/unfixed quantity, expected price, MtM |
 | `GET` | `/valuations/latest` | any | Latest EOD valuation run → `{ runId, runAt, items, totalMtm }` |
 | `GET` | `/stress-results/latest` | MO, BO | Latest run's stress scenarios with base MtM from the same run |
 | `GET` | `/counterparties/{id}/exposure` | FO, MO | Credit limit and current exposure (same calculation as the credit check) |
@@ -387,27 +416,36 @@ transition.
 | `GET` | `/audit-events` | MO, BO | Audit trail, newest first: `?entityId=&page=&pageSize=` |
 | `GET` | `/curve-points` | any | Forward curve points |
 | `POST` | `/curve-points` | MO | Upsert curve point |
+| `GET` | `/indices` | any | Price indices formula trades can average |
+| `GET` | `/indices/{code}/fixings` | any | Daily fixings (`?from=&to=`) |
+| `POST` | `/indices/{code}/fixings` | MO | Publish a fixing (weekdays only; 409 if the day already has one) |
 | `GET` | `/health` | anonymous | Aggregate health (200/503) |
 | `GET` | `/health/detail` | anonymous | Per-check JSON (status, latency) |
 
 ## Testing strategy
 
-282 .NET tests across three layers, plus the web client's own unit and
+313 .NET tests across three layers, plus the web client's own unit and
 end-to-end suites:
 
 | Layer | Count | What it covers |
 |---|---|---|
-| Unit (Trading, Risk, Identity, MarketData) | 128 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions (including the approver carried through the saga), password hashing, curve import, cargo tolerance band edges, laycan, quality limits |
+| Unit (Trading, Risk, Settlement, Identity, MarketData) | 149 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions (including the approver carried through the saga), password hashing, curve import, cargo tolerance band edges, laycan, quality limits, formula pricing (pricing days, expected price, MtM and stress of the fixed share to the cent, negative premium, a sell trade, index-trade booking, amend and fixing rules), final invoices (fixed and formula price), the synthetic fixing series |
 | Architecture | 69 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default, MassTransit version pin, no MediatR, explicit rounding, EF Core defaults convention, saga placement |
-| Integration | 85 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency, append-only grants, RLS tenant isolation; blotter/history/exposure/valuation/stress/audit read models, 409 for invalid transitions, role denial (403) per endpoint, per-IP login rate limiting (trusted proxy, unconfigured, two-hop with a forged entry), reservation release on delivery and move on amend, one EOD run id across valuation and stress, commodity master data (roles, duplicates, quality spec rules, unknown commodity on a trade, RLS), coal cargo (the spec's worked example to the cent, out-of-tolerance B/L, quality rejection, booking and nomination rules, audit, no REMIT for coal) |
+| Integration | 95 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency, append-only grants, RLS tenant isolation; blotter/history/exposure/valuation/stress/audit read models, 409 for invalid transitions, role denial (403) per endpoint, per-IP login rate limiting (trusted proxy, unconfigured, two-hop with a forged entry), reservation release on delivery and move on amend, one EOD run id across valuation and stress, commodity master data (roles, duplicates, quality spec rules, unknown commodity on a trade, RLS), coal cargo (the spec's worked example to the cent, out-of-tolerance B/L, quality rejection, booking and nomination rules, audit, no REMIT for coal), formula pricing (spec 03's worked example from fixings through EOD valuation and stress to the final invoice, fixing before loading, a certificate and a fixing at the same moment, a sell trade, booking and submit rules, append-only fixings, roles, the daily synthetic fixing import) |
 | Web unit (Vitest) | 29 | JWT decoding, money/date formatting, the allowed-actions table (state × role), history diff, nav role gating |
-| Web E2E (Playwright) | 13 | Against the full compose stack: create/submit within limit, breach → MO approve via the saga, MO reject, amend with diff, deliver → BO invoice, tenant isolation, BO role gating, FO role gating, curve change → live MtM change, deep-link reload, commodity units, coal cargo end to end (nominate, load, certify, provisional and final invoices), no Deliver button on a cargo |
+| Web E2E (Playwright) | 14 | Against the full compose stack: create/submit within limit, breach → MO approve via the saga, MO reject, amend with diff, deliver → BO invoice, tenant isolation, BO role gating, FO role gating, curve change → live MtM change, deep-link reload, commodity units, coal cargo end to end (nominate, load, certify, provisional and final invoices), no Deliver button on a cargo, index-priced coal (fixings published on the Market data page, k-of-N progress, back office fixes the final price) |
 
 CI (`.github/workflows/ci.yml`) runs four jobs: `build-and-test` (all .NET
 tests), `api-contract` (fails if the committed OpenAPI document is stale),
 `web` (lint, format, typecheck, unit tests, build, and a check that the
 generated TS client matches the OpenAPI document) and `e2e` (compose +
 seed + Playwright, on pushes to `main`).
+
+Integration tests never wait on a clock. The test host starts only after
+the bus has, and a test awaits the consumer it depends on, for example
+`factory.Bus.Consumed<TradeActivatedConsumer, TradeActivated>(…)`, before
+reading the result once. The only timeout is a hang guard
+([ADR-0039](docs/adr/0039-integration-tests-wait-for-consumers.md)).
 
 **What's deliberately not covered:** no contract tests between modules
 (arch tests enforce the boundary; contracts are DTOs with no logic to test);
@@ -534,7 +572,7 @@ dropdown.
 graph LR
     SRC["📦 Source code\n+ Dockerfiles"] --> IMG["🐳 Docker images\n(5 services)"]
 
-    IMG --> DC["🐳 <b>docker compose</b>\nlocal dev\n9 containers"]
+    IMG --> DC["🐳 <b>docker compose</b>\nlocal dev\n10 containers"]
     IMG --> K3D["☸️ <b>k3d + Helm</b>\nlocal k8s\n11 workloads"]
     IMG --> AWS["🔶 <b>AWS ECS Fargate</b>\nTerraform\nRDS · ALB · ECR"]
     IMG --> AZ["🔷 <b>Azure Container Apps</b>\nBicep\nFlexible Server · ACR"]
@@ -562,14 +600,15 @@ Both deploy steps are defined but disabled until infrastructure is
 provisioned.
 
 **Migrations** run at startup — each module calls `MigrateAsync()` before
-the app accepts traffic. With multiple instances, EF Core's migration lock
-(`__EFMigrationsHistory`) serializes execution. In production, a dedicated
+the app accepts traffic. The API and both workers may migrate at the same
+time, so one shared PostgreSQL advisory lock (`MigrationLock` in
+SharedKernel) serializes every module's migrations. In production, a dedicated
 migration job (or init container) would run before the rolling deploy
 to avoid the startup penalty and remove `ALTER TABLE` permissions from
 the runtime identity.
 
 Multi-stage Dockerfiles keep images lean (`aspnet:10.0`). A full
-`docker compose up` starts all nine services locally.
+`docker compose up` starts all ten services locally.
 
 ## Local Kubernetes (k3s)
 
@@ -728,10 +767,11 @@ rather than hidden:
 |---|---|---|
 | 1 — skeleton | Module boundaries, domain, multi-tenancy | 7 arch-test rules in CI; credit-limit saga ([ADR-0008](docs/adr/0008-saga-placement-and-ownership.md)); full trade lifecycle ([ADR-0011](docs/adr/0011-trade-lifecycle-extension.md)); EF Core filter + PostgreSQL RLS ([ADR-0005](docs/adr/0005-multi-tenancy.md)); JWT FO/MO/BO roles ([ADR-0013](docs/adr/0013-identity-custom-jwt-auth.md)) |
 | 2 — async | Workers, real market data, RabbitMQ | `Valuation.Worker` EOD MtM ([ADR-0014](docs/adr/0014-valuation-worker.md)); `Reporting.Worker` REMIT ([ADR-0015](docs/adr/0015-reporting-worker.md)); stress scenarios ([ADR-0016](docs/adr/0016-stress-scenarios.md)); RabbitMQ transport ([ADR-0017](docs/adr/0017-rabbitmq-transport.md)); ENTSO-E/EIA curve import ([ADR-0018](docs/adr/0018-curve-import.md)); MtM-based credit exposure |
-| 3 — deploy (AWS) | Docker, Terraform, CI/CD | Multi-stage Dockerfiles, `docker-compose.yml` (9 services); Terraform VPC/RDS/ECS/ALB/ECR; GitHub Actions OIDC → ECR push |
+| 3 — deploy (AWS) | Docker, Terraform, CI/CD | Multi-stage Dockerfiles, `docker-compose.yml`; Terraform VPC/RDS/ECS/ALB/ECR; GitHub Actions OIDC → ECR push |
 | 4 — docs & polish | Architecture diagram, ADR consistency | Mermaid diagram, README structure, ADR style pass |
 | 5 — Azure | Cloud portability lane | Bicep infra ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)); Azure Service Bus transport ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)); Azure Functions Timer trigger ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)); portability arch-test ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)); one pipeline, both clouds ([ADR-0024](docs/adr/0024-github-actions-federation.md)) |
 | 6 — web UI | Making the backend visible | React + Mantine SPA behind a same-origin nginx proxy; OpenAPI as a committed, CI-checked contract; real approver recorded through the saga; 409 for invalid transitions; per-IP login limiting; second demo tenant; Playwright E2E ([ADR-0030](docs/adr/0030-web-ui.md)). Risk/audit read models: EOD run id, live MtM with server totals, exposure shared with the credit check, credit reservations released on delivery and moved on amend, full lifecycle audit, Hangfire dashboard in Development ([ADR-0031](docs/adr/0031-risk-read-models-for-the-ui.md)) |
+| 7 — CTRM *(in progress)* | Physical commodity processes | Commodity master data with units ([ADR-0033](docs/adr/0033-commodity-master-data.md)); coal cargoes: nomination, B/L within tolerance as delivery, quality-adjusted provisional and final invoices ([ADR-0034](docs/adr/0034-coal-cargo-logistics.md), [ADR-0037](docs/adr/0037-shipment-lives-in-trading.md)); formula pricing with append-only index fixings and per-trade valuation of the fixed share ([ADR-0035](docs/adr/0035-formula-pricing.md), [ADR-0038](docs/adr/0038-price-fixing-is-confirmed-in-trading.md)). Gas storage specified ([ADR-0032](docs/adr/0032-ctrm-scope.md)) |
 | — k8s | Local Kubernetes | Helm chart, k3d bootstrap, health probes (liveness/readiness/startup), migration Job, graceful shutdown, OTel Collector → Jaeger pipeline ([ADR-0026](docs/adr/0026-local-k3s-deployment.md)) |
 
 The code delta between AWS and Azure is one thing: the MassTransit transport
@@ -775,11 +815,13 @@ enforced by an architecture test that fails the build if any `AWSSDK.*` or
 | [0029](docs/adr/0029-init-process-pid1.md) | tini as PID 1: unhandled exceptions terminate the container instead of hanging |
 | [0030](docs/adr/0030-web-ui.md) | Thin web UI: React, same-origin `/api` proxy, OpenAPI as the committed contract |
 | [0031](docs/adr/0031-risk-read-models-for-the-ui.md) | Risk & audit read models: EOD run id, one exposure calculation, reservations that follow the trade |
-| [0032](docs/adr/0032-ctrm-scope.md) | Scope: from an ETRM core to a CTRM — what is missing, in which order it is built *(specified)* |
+| [0032](docs/adr/0032-ctrm-scope.md) | Scope: from an ETRM core to a CTRM — what is missing, in which order it is built *(steps 1–3 implemented)* |
 | [0033](docs/adr/0033-commodity-master-data.md) | Commodity master data and units of measure |
-| [0034](docs/adr/0034-coal-cargo-logistics.md) | Coal cargo: actualization within a tolerance, quality-adjusted provisional and final invoices |
-| [0035](docs/adr/0035-formula-pricing.md) | Formula pricing and append-only daily index fixings *(specified)* |
+| [0034](docs/adr/0034-coal-cargo-logistics.md) | Coal cargo: actualization within a tolerance, quality-adjusted provisional and final invoices (amended by 0037) |
+| [0035](docs/adr/0035-formula-pricing.md) | Formula pricing and append-only daily index fixings (amended by 0038) |
 | [0036](docs/adr/0036-gas-storage-inventory.md) | Gas storage: Inventory module and WACOG *(specified)* |
 | [0037](docs/adr/0037-shipment-lives-in-trading.md) | The shipment lives in Trading: one outbox, loading and delivery in one transaction (amends 0034) |
+| [0038](docs/adr/0038-price-fixing-is-confirmed-in-trading.md) | Back office confirms the final price in Trading; no fixing event from MarketData (amends 0035) |
+| [0039](docs/adr/0039-integration-tests-wait-for-consumers.md) | Integration tests wait for the consumer they depend on, not for a clock; the test host starts after the bus |
 
 </details>

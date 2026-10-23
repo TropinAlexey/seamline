@@ -25,4 +25,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Seamline.Modules.Settlement.Tests" />
+    <InternalsVisibleTo Include="Seamline.IntegrationTests" />
+  </ItemGroup>
+
 </Project>

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using Seamline.Modules.Identity.Contracts;
+using Seamline.Modules.Settlement.Internal;
+using Seamline.Modules.Trading.Contracts;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -39,14 +41,16 @@ public sealed class SettlementTests(SeamlineApiFactory factory) : IClassFixture<
         var foA = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantA, IdentityRoles.FrontOffice);
         var foB = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantB, IdentityRoles.FrontOffice);
 
-        await DeliverTradeAsync(foA, "POWER", "2027-09", "Buy", 100m, 50m);
-        await DeliverTradeAsync(foB, "GAS", "2027-09", "Sell", 200m, 30m);
+        var tradeA = await DeliverTradeAsync(foA, "POWER", "2027-09", "Buy", 100m, 50m);
+        var tradeB = await DeliverTradeAsync(foB, "GAS", "2027-09", "Sell", 200m, 30m);
+        await factory.Bus.Consumed<TradeDeliveredConsumer, TradeDelivered>(m => m.TradeId == tradeA);
+        await factory.Bus.Consumed<TradeDeliveredConsumer, TradeDelivered>(m => m.TradeId == tradeB);
 
         var boA = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantA, IdentityRoles.BackOffice);
         var boB = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantB, IdentityRoles.BackOffice);
 
-        var invoicesA = await PollForInvoiceCountAsync(boA, 1);
-        var invoicesB = await PollForInvoiceCountAsync(boB, 1);
+        var invoicesA = (await boA.GetFromJsonAsync<List<InvoiceDto>>("/invoices"))!;
+        var invoicesB = (await boB.GetFromJsonAsync<List<InvoiceDto>>("/invoices"))!;
 
         Assert.Single(invoicesA);
         Assert.Equal(5_000m, invoicesA[0].Amount); // 100 × 50
@@ -91,21 +95,6 @@ public sealed class SettlementTests(SeamlineApiFactory factory) : IClassFixture<
         });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<TradeIdDto>())!;
-    }
-
-    private static async Task<List<InvoiceDto>> PollForInvoiceCountAsync(HttpClient client, int expectedCount)
-    {
-        List<InvoiceDto>? invoices = null;
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            invoices = await client.GetFromJsonAsync<List<InvoiceDto>>("/invoices");
-            if (invoices?.Count == expectedCount)
-                return invoices;
-            await Task.Delay(250);
-        }
-
-        Assert.Fail($"Expected {expectedCount} invoice(s) but found {invoices?.Count ?? 0} within the poll window.");
-        return default!;
     }
 
     private sealed record CounterpartyDto(Guid Id, string Name, decimal CreditLimit);

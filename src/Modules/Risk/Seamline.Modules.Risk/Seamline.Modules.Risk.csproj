@@ -25,6 +25,7 @@
          grants the unit test project friend access instead of making it
          public. Same pattern as Seamline.Modules.Trading.csproj. -->
     <InternalsVisibleTo Include="Seamline.Modules.Risk.Tests" />
+    <InternalsVisibleTo Include="Seamline.IntegrationTests" />
   </ItemGroup>
 
   <PropertyGroup>

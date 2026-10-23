@@ -83,8 +83,12 @@ internal sealed partial class Shipment : TenantOwnedEntity<Guid>
 
     // A parameter outside the contract's rejection limits ends the automated
     // flow: no final invoice, the claim is handled outside the system.
+    //
+    // tradePrice is the price the final invoice adjusts from; null while an
+    // index-priced trade's window is still open, and the final invoice then
+    // waits for TradePriceFixed (ADR-0035).
     public (ShipmentHistory History, object Event) RecordCertificate(
-        CargoTerms terms, decimal measuredNar, decimal sulphurPct, decimal ashPct, string changedBy)
+        CargoTerms terms, decimal measuredNar, decimal sulphurPct, decimal ashPct, string changedBy, decimal? tradePrice)
     {
         RequireState(nameof(RecordCertificate), ShipmentState.Loaded);
         if (measuredNar <= 0 || sulphurPct < 0 || ashPct < 0)
@@ -102,10 +106,17 @@ internal sealed partial class Shipment : TenantOwnedEntity<Guid>
             : $"Rejected on quality: NAR {measuredNar:0.0}, S {sulphurPct:0.00}%, ash {ashPct:0.00}%";
         var history = ShipmentHistory.CreateSnapshot(this, changedBy, reason);
         object @event = accepted
-            ? new CargoQualityCertified(TradeId, TenantId.Value, measuredNar, sulphurPct, ashPct, terms.BaseNarKcalKg, changedBy, reason)
+            ? new CargoQualityCertified(TradeId, TenantId.Value, measuredNar, sulphurPct, ashPct, terms.BaseNarKcalKg, changedBy, reason,
+                FinalPrice: tradePrice, PricePending: tradePrice is null)
             : new CargoQualityRejected(TradeId, TenantId.Value, measuredNar, sulphurPct, ashPct, changedBy, reason);
         return (history, @event);
     }
+
+    // What the final invoice needs from this cargo, once it is certified.
+    public CargoCertificate? CertifiedQuality(CargoTerms terms) =>
+        State == ShipmentState.QualityCertified && MeasuredNarKcalKg is { } measured
+            ? new CargoCertificate(measured, terms.BaseNarKcalKg)
+            : null;
 
     private void Touch()
     {

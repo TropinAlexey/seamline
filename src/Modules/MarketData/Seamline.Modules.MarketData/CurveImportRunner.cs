@@ -53,6 +53,43 @@ internal sealed class CurveImportRunner(IServiceProvider services, ILogger<Curve
                 await UpsertAsync(tenantId, commodityCode, deliveryPeriod, price.Value, cancellationToken);
             }
         }
+
+        await PublishTodaysFixingsAsync(month, cancellationToken);
+    }
+
+    // Today's fixing for every price index some tenant has (ADR-0035). The
+    // indices are synthetic — real benchmarks are proprietary — so the value
+    // always comes from SyntheticCurveSource, whatever curve source is
+    // configured. Fixings are append-only: one that already exists, published
+    // by hand or by an earlier run, is left as it is. Weekends have none.
+    private async Task PublishTodaysFixingsAsync(DateOnly today, CancellationToken cancellationToken)
+    {
+        if (!PricingCalendar.IsPricingDay(today))
+            return;
+
+        List<(Guid TenantId, string Code, string CommodityCode)> indices;
+        await using (var owner = CreateOwnerContext())
+        {
+            indices = (await owner.PriceIndices.IgnoreQueryFilters()
+                    .Select(i => new { TenantId = i.TenantId.Value, i.Code, i.CommodityCode })
+                    .ToListAsync(cancellationToken))
+                .Select(i => (i.TenantId, i.Code, i.CommodityCode))
+                .ToList();
+        }
+
+        var source = new SyntheticCurveSource();
+        foreach (var (tenantId, code, commodityCode) in indices)
+        {
+            using var scope = services.CreateScope();
+            scope.ServiceProvider.GetRequiredService<TenantContext>().SetTenant(new TenantId(tenantId));
+            var db = scope.ServiceProvider.GetRequiredService<MarketDataDbContext>();
+
+            if (await db.IndexFixings.AnyAsync(f => f.IndexCode == code && f.FixingDate == today, cancellationToken))
+                continue;
+            db.IndexFixings.Add(IndexFixing.Publish(
+                new TenantId(tenantId), code, today, source.DailyFixing(commodityCode, today), "curve-import"));
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private async Task<decimal?> FetchPriceAsync(string commodityCode, DateOnly month, CancellationToken cancellationToken)

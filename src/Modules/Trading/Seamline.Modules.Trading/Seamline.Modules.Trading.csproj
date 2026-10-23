@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Risk\Seamline.Modules.Risk.Contracts\Seamline.Modules.Risk.Contracts.csproj" />
+    <ProjectReference Include="..\..\MarketData\Seamline.Modules.MarketData.Contracts\Seamline.Modules.MarketData.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

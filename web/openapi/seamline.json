@@ -59,6 +59,25 @@
         }
       }
     },
+    "/pricing-exposure": {
+      "get": {
+        "tags": [
+          "Risk"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingExposureResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/valuations/latest": {
       "get": {
         "tags": [
@@ -897,6 +916,82 @@
         }
       }
     },
+    "/trades/{id}/pricing": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradePricing"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/trades/{id}/fix-price": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/shipments": {
       "get": {
         "tags": [
@@ -1225,6 +1320,139 @@
           }
         }
       }
+    },
+    "/indices": {
+      "get": {
+        "tags": [
+          "MarketData"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceIndexEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/indices/{code}/fixings": {
+      "get": {
+        "tags": [
+          "MarketData"
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IndexFixingEntry"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MarketData"
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishFixingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexFixingEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1242,7 +1470,10 @@
             "format": "double"
           },
           "price": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           },
           "reason": {
@@ -1523,7 +1754,10 @@
             "format": "double"
           },
           "price": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           },
           "counterpartyId": {
@@ -1537,6 +1771,16 @@
               },
               {
                 "$ref": "#/components/schemas/CargoTermsRequest"
+              }
+            ]
+          },
+          "indexPricing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IndexPricingRequest"
               }
             ]
           }
@@ -1587,6 +1831,84 @@
         "properties": {
           "error": {
             "type": "string"
+          }
+        }
+      },
+      "IndexFixingEntry": {
+        "required": [
+          "fixingDate",
+          "value",
+          "publishedAt",
+          "publishedBy"
+        ],
+        "type": "object",
+        "properties": {
+          "fixingDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "value": {
+            "type": "number",
+            "format": "double"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "publishedBy": {
+            "type": "string"
+          }
+        }
+      },
+      "IndexPricingRequest": {
+        "required": [
+          "indexCode",
+          "windowFrom",
+          "windowTo",
+          "premium"
+        ],
+        "type": "object",
+        "properties": {
+          "indexCode": {
+            "type": "string"
+          },
+          "windowFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "windowTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "premium": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "IndexPricingTerms": {
+        "required": [
+          "indexCode",
+          "windowFrom",
+          "windowTo",
+          "premium"
+        ],
+        "type": "object",
+        "properties": {
+          "indexCode": {
+            "type": "string"
+          },
+          "windowFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "windowTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "premium": {
+            "type": "number",
+            "format": "double"
           }
         }
       },
@@ -1762,6 +2084,145 @@
               "null",
               "number"
             ],
+            "format": "double"
+          }
+        }
+      },
+      "PriceIndexEntry": {
+        "required": [
+          "code",
+          "commodityCode",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "commodityCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PricingExposureEntry": {
+        "required": [
+          "tradeId",
+          "commodityCode",
+          "deliveryPeriod",
+          "indexCode",
+          "volume",
+          "pricingDays",
+          "fixedDays",
+          "fixedQuantity",
+          "unfixedQuantity",
+          "expectedPrice",
+          "forward",
+          "finalPrice",
+          "mtmAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "tradeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "indexCode": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "pricingDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fixedDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fixedQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "unfixedQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedPrice": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "forward": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "finalPrice": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "mtmAmount": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "PricingExposureResponse": {
+        "required": [
+          "items",
+          "totalMtm"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PricingExposureEntry"
+            }
+          },
+          "totalMtm": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "PublishFixingRequest": {
+        "required": [
+          "fixingDate",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "fixingDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "value": {
+            "type": "number",
             "format": "double"
           }
         }
@@ -2052,7 +2513,8 @@
           "deliveryPeriod",
           "netVolume",
           "shockedPrice",
-          "mtmAmount"
+          "mtmAmount",
+          "tradeId"
         ],
         "type": "object",
         "properties": {
@@ -2073,6 +2535,13 @@
           "mtmAmount": {
             "type": "number",
             "format": "double"
+          },
+          "tradeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -2160,7 +2629,10 @@
             "format": "double"
           },
           "price": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           }
         }
@@ -2232,11 +2704,17 @@
             "format": "double"
           },
           "price": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           },
           "notional": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           },
           "counterpartyId": {
@@ -2268,6 +2746,92 @@
           "total": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "TradePricing": {
+        "required": [
+          "indexCode",
+          "windowFrom",
+          "windowTo",
+          "premium",
+          "pricingDays",
+          "fixedDays",
+          "averageFixing",
+          "forward",
+          "expectedPrice",
+          "fixedQuantity",
+          "unfixedQuantity",
+          "formulaFinalPrice",
+          "confirmedPrice"
+        ],
+        "type": "object",
+        "properties": {
+          "indexCode": {
+            "type": "string"
+          },
+          "windowFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "windowTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "premium": {
+            "type": "number",
+            "format": "double"
+          },
+          "pricingDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fixedDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "averageFixing": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "forward": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "expectedPrice": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "fixedQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "unfixedQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "formulaFinalPrice": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "confirmedPrice": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -2332,7 +2896,8 @@
           "version",
           "lastChangedAt",
           "actualVolume",
-          "cargoTerms"
+          "cargoTerms",
+          "pricing"
         ],
         "type": "object",
         "properties": {
@@ -2354,11 +2919,17 @@
             "format": "double"
           },
           "price": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           },
           "notional": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           },
           "counterpartyId": {
@@ -2392,6 +2963,16 @@
                 "$ref": "#/components/schemas/CargoTermsRef"
               }
             ]
+          },
+          "pricing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IndexPricingTerms"
+              }
+            ]
           }
         }
       },
@@ -2409,7 +2990,8 @@
           "weightedAvgPrice",
           "curvePrice",
           "curvePublishedAt",
-          "mtmAmount"
+          "mtmAmount",
+          "tradeId"
         ],
         "type": "object",
         "properties": {
@@ -2438,6 +3020,13 @@
           "mtmAmount": {
             "type": "number",
             "format": "double"
+          },
+          "tradeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },

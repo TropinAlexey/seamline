@@ -26,7 +26,15 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     public string DeliveryPeriod { get; private set; } = string.Empty;
     public TradeDirection Direction { get; private set; }
     public decimal Volume { get; private set; }
-    public decimal Price { get; private set; }
+    // Null for an index-priced trade until its pricing window has fully
+    // fixed (ADR-0035): a placeholder would be a fiction every consumer had
+    // to know to ignore. Fixed-price trades always have one.
+    public decimal? Price { get; private set; }
+
+    // "Average of an index over a window, plus a premium" — cargo
+    // commodities only. Null for a fixed-price trade.
+    public IndexPricingTerms? Pricing { get; private set; }
+
     public Guid CounterpartyId { get; private set; }
     public TradeState State { get; private set; }
     public int Version { get; private set; }
@@ -53,17 +61,25 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         string deliveryPeriod,
         TradeDirection direction,
         decimal volume,
-        decimal price,
+        decimal? price,
         Guid counterpartyId,
-        CargoTerms? cargoTerms = null)
+        CargoTerms? cargoTerms = null,
+        IndexPricingTerms? pricing = null)
     {
         if (string.IsNullOrWhiteSpace(commodityCode))
             throw new ArgumentException("Commodity code is required.", nameof(commodityCode));
         DeliveryPeriodFormat.Validate(deliveryPeriod);
         if (volume <= 0)
             throw new ArgumentOutOfRangeException(nameof(volume), "Volume must be positive.");
-        if (price <= 0)
-            throw new ArgumentOutOfRangeException(nameof(price), "Price must be positive.");
+        if (pricing is null)
+        {
+            if (price is not > 0)
+                throw new ArgumentOutOfRangeException(nameof(price), "Price must be positive.");
+        }
+        else
+        {
+            RequireValidIndexPricing(pricing, price, cargoTerms, deliveryPeriod);
+        }
         cargoTerms?.RequireLaycanWithin(deliveryPeriod);
 
         return new Trade
@@ -74,7 +90,8 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
             DeliveryPeriod = deliveryPeriod,
             Direction = direction,
             Volume = volume,
-            Price = price,
+            Price = pricing is null ? price : null,
+            Pricing = pricing,
             CounterpartyId = counterpartyId,
             CargoTerms = cargoTerms,
             State = TradeState.Draft,
@@ -83,7 +100,29 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         };
     }
 
-    public decimal Notional => Volume * Price;
+    // Null while an index-priced trade is unfixed.
+    public decimal? Notional => Volume * Price;
+
+    // Index pricing is offered on cargo commodities only (ADR-0035): an
+    // index-priced power or gas trade would need REMIT price-formula fields
+    // the simplified report does not carry. The window lies inside the
+    // delivery month, so the month's forward prices its unfixed days.
+    private static void RequireValidIndexPricing(
+        IndexPricingTerms pricing, decimal? price, CargoTerms? cargoTerms, string deliveryPeriod)
+    {
+        if (price is not null)
+            throw new ArgumentException("An index-priced trade has no fixed price.", nameof(price));
+        if (cargoTerms is null)
+            throw new ArgumentException("Index pricing is offered on cargo commodities only.", nameof(pricing));
+        if (string.IsNullOrWhiteSpace(pricing.IndexCode))
+            throw new ArgumentException("Index code is required.", nameof(pricing));
+        if (pricing.WindowFrom > pricing.WindowTo)
+            throw new ArgumentException("Pricing window start must not be after its end.", nameof(pricing));
+        if (!DeliveryPeriodFormat.Contains(deliveryPeriod, pricing.WindowFrom) || !DeliveryPeriodFormat.Contains(deliveryPeriod, pricing.WindowTo))
+            throw new ArgumentException($"The pricing window must lie within the delivery period {deliveryPeriod}.", nameof(pricing));
+        if (pricing.PricingDays().Count == 0)
+            throw new ArgumentException("The pricing window has no weekday to fix on.", nameof(pricing));
+    }
 
     public TradeHistory Submit(string changedBy, string changeReason)
     {
@@ -99,7 +138,8 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         State = TradeState.Active;
         Touch();
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
-        var activated = new TradeActivated(Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, Volume, Price, CounterpartyId, changedBy, changeReason);
+        var activated = new TradeActivated(
+            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, Volume, Price, CounterpartyId, changedBy, changeReason, Pricing);
         return (history, activated);
     }
 
@@ -140,18 +180,29 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     // full breach saga (ADR-0008) for what's meant to be a lightweight
     // correction. TradeAmended carries both OldVolume and the new Volume so
     // Risk can adjust the position by the delta instead of recomputing it.
-    public (TradeHistory History, TradeAmended Event) Amend(string changedBy, string changeReason, decimal newVolume, decimal newPrice)
+    //
+    // An index-priced trade amends its volume only: its price comes from the
+    // formula, and changing the formula is a cancel and rebook (ADR-0035).
+    public (TradeHistory History, TradeAmended Event) Amend(string changedBy, string changeReason, decimal newVolume, decimal? newPrice)
     {
         RequireState(nameof(Amend), TradeState.Active);
         if (newVolume <= 0)
             throw new ArgumentOutOfRangeException(nameof(newVolume), "Volume must be positive.");
-        if (newPrice <= 0)
+        if (Pricing is not null)
+        {
+            if (newPrice is not null && newPrice != Price)
+                throw new ArgumentException("An index-priced trade's price comes from its formula; amend the volume only.", nameof(newPrice));
+        }
+        else if (newPrice is not > 0)
+        {
             throw new ArgumentOutOfRangeException(nameof(newPrice), "Price must be positive.");
+        }
 
         var oldVolume = Volume;
         var oldPrice = Price;
         Volume = newVolume;
-        Price = newPrice;
+        if (Pricing is null)
+            Price = newPrice;
         Touch();
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var amended = new TradeAmended(
@@ -169,11 +220,12 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         if (CargoTerms is not null)
             throw new DomainRuleViolationException(
                 $"Trade {Id} is a cargo trade: it is delivered by recording the loading (B/L), not directly.");
+        var price = Price ?? throw new DomainRuleViolationException($"Trade {Id} has no price to deliver at.");
         State = TradeState.Delivered;
         Touch();
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var delivered = new TradeDelivered(
-            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, Volume, Price, changedBy, changeReason,
+            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, Volume, price, changedBy, changeReason,
             ContractVolume: Volume);
         return (history, delivered);
     }
@@ -182,7 +234,12 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     // (ADR-0034). The loaded quantity must sit inside the contract's
     // tolerance band; outside it is a breach, and changing the contract
     // quantity is a commercial decision that goes through Amend first.
-    public (TradeHistory History, TradeDelivered Event) DeliverLoaded(string changedBy, decimal blQuantity, DateOnly blDate)
+    //
+    // An index-priced trade loaded before its window has fixed is invoiced
+    // provisionally at the expected price of the day (ADR-0035), which the
+    // caller gets from Risk; once fixed, its own Price is used.
+    public (TradeHistory History, TradeDelivered Event) DeliverLoaded(
+        string changedBy, decimal blQuantity, DateOnly blDate, decimal? expectedPrice = null)
     {
         RequireState(nameof(DeliverLoaded), TradeState.Active);
         if (CargoTerms is null)
@@ -194,15 +251,44 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
                 $"B/L quantity {blQuantity:0.000} is outside the contract tolerance {min:0.000}–{max:0.000}. " +
                 "Amend the contract quantity first.");
 
+        var invoicePrice = Price ?? expectedPrice
+            ?? throw new DomainRuleViolationException($"Trade {Id} has no price yet: an expected price is needed to invoice it provisionally.");
+
         ActualVolume = blQuantity;
         State = TradeState.Delivered;
         Touch();
         var reason = $"Loaded: B/L {blDate:yyyy-MM-dd}, {blQuantity:0.000}";
         var history = TradeHistory.CreateSnapshot(this, changedBy, reason);
         var delivered = new TradeDelivered(
-            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, blQuantity, Price, changedBy, reason,
+            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, blQuantity, invoicePrice, changedBy, reason,
             ContractVolume: Volume, CargoTerms: CargoTerms.ToRef());
         return (history, delivered);
+    }
+
+    // Every pricing day has fixed: the formula price becomes the trade's
+    // price, as a new version with actor and reason (ADR-0006, ADR-0035).
+    // A person confirms it (ADR-0038); Risk computed it. Allowed after
+    // delivery too — a cargo often loads mid-window. The certificate data,
+    // when the cargo already has one, rides along so Settlement can issue
+    // the final invoice from this event.
+    public (TradeHistory History, TradePriceFixed Event) FixPrice(
+        string changedBy, decimal finalPrice, decimal averageFixing, CargoCertificate? certificate = null)
+    {
+        RequireState(nameof(FixPrice), TradeState.Active, TradeState.Delivered);
+        if (Pricing is null)
+            throw new DomainRuleViolationException($"Trade {Id} is fixed-price; there is no window to fix.");
+        if (Price is not null)
+            throw new DomainRuleViolationException($"Trade {Id}'s price is already fixed at {Price:0.0000}.");
+        if (finalPrice <= 0)
+            throw new DomainRuleViolationException($"Final price {finalPrice:0.0000} is not positive; check the premium.");
+
+        Price = finalPrice;
+        Touch();
+        var reason = $"Pricing window fixed: average {averageFixing:0.0000} {Pricing.Premium:+0.0000;-0.0000} premium = {finalPrice:0.0000}";
+        var history = TradeHistory.CreateSnapshot(this, changedBy, reason);
+        var fixedEvent = new TradePriceFixed(
+            Id, TenantId.Value, finalPrice, changedBy, reason, certificate?.MeasuredNarKcalKg, certificate?.BaseNarKcalKg);
+        return (history, fixedEvent);
     }
 
     // Every transition is a new version; TradeHistory.CreateSnapshot copies

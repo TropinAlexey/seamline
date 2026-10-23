@@ -121,7 +121,10 @@ export function ShipmentPanel({ trade }: { trade: TradeSummary }) {
             {session.role === "BO" && trade.state === "Delivered" && (
               <CargoInvoices
                 tradeId={trade.id}
-                awaitingFinal={shipment.data.state === "QualityCertified"}
+                awaitingFinal={
+                  shipment.data.state === "QualityCertified" &&
+                  (trade.pricing == null || trade.price != null)
+                }
               />
             )}
           </Stack>

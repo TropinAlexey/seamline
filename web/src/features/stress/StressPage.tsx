@@ -140,7 +140,9 @@ export function StressPage() {
                     </Table.Thead>
                     <Table.Tbody>
                       {scenario.items.map((item) => (
-                        <Table.Tr key={`${item.commodityCode}-${item.deliveryPeriod}`}>
+                        <Table.Tr
+                          key={`${item.commodityCode}-${item.deliveryPeriod}-${item.tradeId ?? "position"}`}
+                        >
                           <Table.Td>
                             {item.commodityCode} {item.deliveryPeriod}
                           </Table.Td>

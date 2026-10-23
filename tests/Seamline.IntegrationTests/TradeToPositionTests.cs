@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using Seamline.Modules.Identity.Contracts;
+using Seamline.Modules.Trading.Contracts;
+using Risk = Seamline.Modules.Risk.Internal;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -24,7 +26,8 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
         var submitResponse = await client.PostAsync($"/trades/{trade.Id}/submit", content: null);
         submitResponse.EnsureSuccessStatusCode();
 
-        var position = await PollForSinglePositionAsync(client);
+        await factory.Bus.Consumed<Risk.TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
+        var position = Assert.Single(await client.GetPositionsAsync<PositionDto>());
         Assert.Equal("POWER", position.CommodityCode);
         Assert.Equal("2027-03", position.DeliveryPeriod);
         Assert.Equal(100m, position.NetVolume);
@@ -72,7 +75,10 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
         var approveResponse = await riskClient.PostAsync($"/trades/{trade.Id}/approve", content: null);
         approveResponse.EnsureSuccessStatusCode();
 
-        var position = await PollForSinglePositionAsync(client);
+        // Approval goes through the saga, then TradeActivated through the
+        // outbox: wait for Risk to have applied it.
+        await factory.Bus.Consumed<Risk.TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
+        var position = Assert.Single(await client.GetPositionsAsync<PositionDto>());
         Assert.Equal("GAS", position.CommodityCode);
         Assert.Equal(1_000m, position.NetVolume);
     }
@@ -98,22 +104,6 @@ public sealed class TradeToPositionTests(SeamlineApiFactory factory) : IClassFix
         });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<TradeIdDto>())!;
-    }
-
-    // Outbox dispatch and the saga/consumers run asynchronously; poll briefly
-    // rather than assert immediately after the triggering call returns.
-    private static async Task<PositionDto> PollForSinglePositionAsync(HttpClient client)
-    {
-        List<PositionDto>? positions = null;
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            positions = await client.GetPositionsAsync<PositionDto>();
-            if (positions is { Count: > 0 })
-                break;
-            await Task.Delay(250);
-        }
-
-        return Assert.Single(positions!);
     }
 
     private sealed record CounterpartyDto(Guid Id, string Name, decimal CreditLimit);

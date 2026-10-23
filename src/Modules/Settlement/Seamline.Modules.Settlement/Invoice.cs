@@ -43,14 +43,17 @@ internal sealed class Invoice : TenantOwnedEntity<Guid>
     // Pro-rata calorific value adjustment (spec 01). The adjusted price is an
     // invoice unit price, so it is rounded to the price scale (4 dp) first,
     // then the amount once to cents — two named rounding points (ADR-0007).
-    public static Invoice CreateFinal(Invoice provisional, decimal measuredNar, decimal baseNar)
+    // tradePrice is what is adjusted: the contract price, or an index-priced
+    // trade's final price (ADR-0035) — its provisional invoice used the
+    // expected price of the loading day instead.
+    public static Invoice CreateFinal(Invoice provisional, decimal tradePrice, decimal measuredNar, decimal baseNar)
     {
         if (provisional.Kind != InvoiceKind.Provisional)
             throw new InvalidOperationException("A final invoice settles a provisional one.");
         if (measuredNar <= 0 || baseNar <= 0)
             throw new ArgumentException("Calorific values must be positive.");
 
-        var adjustedPrice = Math.Round(provisional.UnitPrice!.Value * measuredNar / baseNar, 4, MidpointRounding.ToEven);
+        var adjustedPrice = Math.Round(tradePrice * measuredNar / baseNar, 4, MidpointRounding.ToEven);
         var final = Create(provisional.TenantId, provisional.TradeId, provisional.CounterpartyId, InvoiceKind.Final,
             provisional.Quantity!.Value, adjustedPrice);
         final.Balance = final.Amount - provisional.Amount;

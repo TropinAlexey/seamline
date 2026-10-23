@@ -7,6 +7,7 @@ export type TradeDirection = Schemas["TradeDirection"];
 export type TradeHistoryEntry = Schemas["TradeHistoryEntry"];
 export type RemitReportEntry = Schemas["RemitReportEntry"];
 export type CreditReservationOutcome = Schemas["CreditReservationOutcome"];
+export type TradePricing = Schemas["TradePricing"];
 
 export const tradeStates: readonly TradeState[] = [
   "Draft",
@@ -32,6 +33,7 @@ export const tradeKeys = {
   detail: (id: string) => ["trades", "detail", id] as const,
   history: (id: string) => ["trades", "history", id] as const,
   remit: (id: string) => ["trades", "remit", id] as const,
+  pricing: (id: string) => ["trades", "pricing", id] as const,
 };
 
 export function useTrades(filters: TradeFilters, options: { refetchInterval?: number } = {}) {
@@ -179,6 +181,27 @@ export function useShipmentStep(tradeId: string) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: shipmentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: tradeKeys.all });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+}
+
+// Index-priced trades (ADR-0035, ADR-0038): where the window stands, and the
+// back-office confirmation of the final price once every day has fixed.
+export function useTradePricing(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: tradeKeys.pricing(id),
+    queryFn: () => unwrap(api.GET("/trades/{id}/pricing", { params: { path: { id } } })),
+    enabled,
+  });
+}
+
+export function useFixPrice(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.POST("/trades/{id}/fix-price", { params: { path: { id } } })),
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: tradeKeys.all });
       void queryClient.invalidateQueries({ queryKey: ["invoices"] });
     },

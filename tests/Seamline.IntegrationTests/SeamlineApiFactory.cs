@@ -1,5 +1,8 @@
+using MassTransit;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -33,6 +36,10 @@ public sealed class SeamlineApiFactory : WebApplicationFactory<Program>, IAsyncL
     // through the module boundary just for test access.
     public string ConnectionString => _postgres.GetConnectionString();
 
+    // Consumers this host has finished — what tests wait on instead of a
+    // clock (ConsumeSignals).
+    public ConsumeSignals Bus { get; } = new();
+
     // Same restricted role the app itself connects as — for tests that need
     // to prove the RLS policies (ADR-0005 layer 2) hold even for a raw SQL
     // connection that never goes through EF Core's query filter at all.
@@ -51,6 +58,17 @@ public sealed class SeamlineApiFactory : WebApplicationFactory<Program>, IAsyncL
             Username = "seamline_app",
             Password = "seamline_app"
         };
+
+        builder.ConfigureTestServices(services =>
+        {
+            // The host does not finish starting until the bus has: the first
+            // request of a test can no longer outrun the consumers and the
+            // outbox delivery service. MassTransit's default lets StartAsync
+            // return while the bus is still starting in the background,
+            // which under a fully parallel test run took seconds.
+            services.Configure<MassTransitHostOptions>(options => options.WaitUntilStarted = true);
+            services.AddConsumeObserver(_ => Bus);
+        });
 
         builder.ConfigureAppConfiguration((_, config) =>
         {

@@ -65,7 +65,15 @@ export function TradeTable({ trades, extraHeader, renderExtra }: Props) {
                 <Table.Td ta="right">
                   {formatVolume(trade.volume)} {unitOf(trade.commodityCode)}
                 </Table.Td>
-                <Table.Td ta="right">{formatPrice(trade.price)}</Table.Td>
+                <Table.Td ta="right">
+                  {trade.price == null && trade.pricing ? (
+                    <Text span size="sm" c="dimmed" title={`Average of ${trade.pricing.indexCode}`}>
+                      {trade.pricing.indexCode} avg
+                    </Text>
+                  ) : (
+                    formatPrice(trade.price)
+                  )}
+                </Table.Td>
                 <Table.Td ta="right">{formatAmount(trade.notional)}</Table.Td>
                 <Table.Td>{counterpartyName(trade.counterpartyId)}</Table.Td>
                 <Table.Td>

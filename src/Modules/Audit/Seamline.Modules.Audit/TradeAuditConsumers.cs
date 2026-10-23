@@ -140,3 +140,14 @@ internal sealed class CargoQualityRejectedAuditConsumer(AuditDbContext db, Tenan
             context.CancellationToken);
     }
 }
+
+internal sealed class TradePriceFixedAuditConsumer(AuditDbContext db, TenantContext tenantContext) : IConsumer<TradePriceFixed>
+{
+    public Task Consume(ConsumeContext<TradePriceFixed> context)
+    {
+        var message = context.Message;
+        return AuditRecorder.RecordAsync(
+            db, tenantContext, message.TenantId, message.Actor, nameof(TradePriceFixed), message.TradeId, message.Reason,
+            context.CancellationToken);
+    }
+}

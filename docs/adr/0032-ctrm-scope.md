@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Specified, not yet implemented.
+Accepted. Steps 1–3 implemented (commodity master data, coal cargo,
+formula pricing); step 4 (gas storage) specified.
 
 ## Context
 
@@ -68,7 +69,7 @@ are two ways out:
 | [0002](0002-service-extraction-criteria.md) | Upheld. No new extracted process. Inventory valuation rides on the existing Valuation.Worker EOD pass. |
 | [0015](0015-reporting-worker.md) | Upheld. REMIT stays simplified and covers power and gas only. Coal is outside REMIT's scope, which is consistent with the regulation, not a gap. |
 | [0016](0016-stress-scenarios.md) | Upheld. No VaR. |
-| 0011, 0012, 0014, 0018, 0031 | Amended in part, each by the step-specific ADR that needs it (0033–0036). The reasons are given there. |
+| 0011, 0012, 0014, 0018, 0031 | Amended in part, each by the step-specific ADR that needs it (0033–0036). The reasons are given there. Two of those were amended in turn during implementation: 0034 by [ADR-0037](0037-shipment-lives-in-trading.md), 0035 by [ADR-0038](0038-price-fixing-is-confirmed-in-trading.md). |
 
 ## Consequences
 

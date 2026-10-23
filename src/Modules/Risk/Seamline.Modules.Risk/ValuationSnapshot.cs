@@ -22,7 +22,34 @@ internal sealed class ValuationSnapshot : TenantOwnedEntity<Guid>
     public Guid RunId { get; private set; }
     public DateTimeOffset ValuedAt { get; private set; }
 
+    // Set on a formula trade's row (ADR-0035), which is valued per trade;
+    // null on a position's row. For a formula trade WeightedAvgPrice holds
+    // the expected price, rounded for display — the MtM uses it unrounded.
+    public Guid? TradeId { get; private set; }
+
     private ValuationSnapshot() { }
+
+    public static ValuationSnapshot CreateForFormulaTrade(
+        FormulaTrade trade,
+        decimal expectedPrice,
+        decimal curvePrice,
+        DateTimeOffset curvePublishedAt,
+        EodRun run) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            TenantId = trade.TenantId,
+            TradeId = trade.TradeId,
+            CommodityCode = trade.CommodityCode,
+            DeliveryPeriod = trade.DeliveryPeriod,
+            NetVolume = trade.SignedVolume,
+            WeightedAvgPrice = FormulaPrice.ToPriceScale(expectedPrice)!.Value,
+            CurvePrice = curvePrice,
+            CurvePublishedAt = curvePublishedAt,
+            MtmAmount = MtmCalculator.Calculate(curvePrice, expectedPrice, trade.SignedVolume),
+            RunId = run.RunId,
+            ValuedAt = run.ValuedAt
+        };
 
     public static ValuationSnapshot Create(
         TenantId tenantId,

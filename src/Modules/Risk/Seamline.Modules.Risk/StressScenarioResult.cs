@@ -26,7 +26,46 @@ internal sealed class StressScenarioResult : TenantOwnedEntity<Guid>
     public Guid RunId { get; private set; }
     public DateTimeOffset ValuedAt { get; private set; }
 
+    // Set on a formula trade's row (ADR-0035), as on ValuationSnapshot.
+    public Guid? TradeId { get; private set; }
+
     private StressScenarioResult() { }
+
+    // The shock moves the forward, and the expected price moves with it on
+    // the unfixed days, so only the fixed share responds (spec 03, rule 7).
+    // The caller passes the expected price recomputed at the shocked
+    // forward, or the final price once fixed.
+    public static StressScenarioResult CreateForFormulaTrade(
+        FormulaTrade trade,
+        FormulaPrice formula,
+        decimal curvePrice,
+        ScenarioType scenarioType,
+        decimal shockPercentage,
+        EodRun run)
+    {
+        var shockedPrice = Shock(curvePrice, shockPercentage);
+        var expected = trade.MarkPrice(formula, shockedPrice)!.Value;
+
+        return new StressScenarioResult
+        {
+            Id = Guid.NewGuid(),
+            TenantId = trade.TenantId,
+            TradeId = trade.TradeId,
+            CommodityCode = trade.CommodityCode,
+            DeliveryPeriod = trade.DeliveryPeriod,
+            NetVolume = trade.SignedVolume,
+            WeightedAvgPrice = FormulaPrice.ToPriceScale(expected)!.Value,
+            ScenarioType = scenarioType,
+            ShockPercentage = shockPercentage,
+            ShockedPrice = shockedPrice,
+            MtmAmount = MtmCalculator.Calculate(shockedPrice, expected, trade.SignedVolume),
+            RunId = run.RunId,
+            ValuedAt = run.ValuedAt
+        };
+    }
+
+    private static decimal Shock(decimal curvePrice, decimal shockPercentage) =>
+        Math.Round(curvePrice * (1m + shockPercentage / 100m), 4, MidpointRounding.ToEven);
 
     public static StressScenarioResult Create(
         TenantId tenantId,
@@ -43,7 +82,7 @@ internal sealed class StressScenarioResult : TenantOwnedEntity<Guid>
         // never implicit via a column's numeric(18,4) scale. ShockedPrice
         // is computed (curvePrice * a percentage), not a pass-through of
         // already-stored market data, so it needs its own explicit round.
-        var shockedPrice = Math.Round(curvePrice * (1m + shockPercentage / 100m), 4, MidpointRounding.ToEven);
+        var shockedPrice = Shock(curvePrice, shockPercentage);
         var mtmAmount = MtmCalculator.Calculate(shockedPrice, weightedAvgPrice, netVolume);
 
         return new StressScenarioResult

@@ -23,7 +23,11 @@ internal sealed class TradeDeliveredConsumer(RiskDbContext db, TenantContext ten
         var reservation = await db.CreditReservations.FirstOrDefaultAsync(r => r.TradeId == message.TradeId, context.CancellationToken);
         reservation?.Release();
 
-        var position = await PositionLookup.FindAsync(db, message.CommodityCode, message.DeliveryPeriod, context.CancellationToken);
+        var formulaTrade = await db.FormulaTrades.FirstOrDefaultAsync(f => f.TradeId == message.TradeId, context.CancellationToken);
+        var position = formulaTrade is null
+            ? await PositionLookup.FindAsync(db, message.CommodityCode, message.DeliveryPeriod, context.CancellationToken)
+            : null;
+        formulaTrade?.MarkDelivered();
         if (position is not null)
         {
             // Close what activation opened: the contract quantity. For a cargo

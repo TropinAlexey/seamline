@@ -438,7 +438,7 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_changed_at");
 
-                    b.Property<decimal>("Price")
+                    b.Property<decimal?>("Price")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("price");
@@ -554,7 +554,7 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("direction");
 
-                    b.Property<decimal>("Price")
+                    b.Property<decimal?>("Price")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("price");
@@ -654,7 +654,41 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                                 .HasForeignKey("TradeId");
                         });
 
+                    b.OwnsOne("Seamline.SharedKernel.IndexPricingTerms", "Pricing", b1 =>
+                        {
+                            b1.Property<Guid>("TradeId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("IndexCode")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("pricing_index_code");
+
+                            b1.Property<decimal>("Premium")
+                                .HasPrecision(18, 4)
+                                .HasColumnType("numeric(18,4)")
+                                .HasColumnName("pricing_premium");
+
+                            b1.Property<DateOnly>("WindowFrom")
+                                .HasColumnType("date")
+                                .HasColumnName("pricing_window_from");
+
+                            b1.Property<DateOnly>("WindowTo")
+                                .HasColumnType("date")
+                                .HasColumnName("pricing_window_to");
+
+                            b1.HasKey("TradeId");
+
+                            b1.ToTable("trade", "trading");
+
+                            b1.WithOwner()
+                                .HasForeignKey("TradeId");
+                        });
+
                     b.Navigation("CargoTerms");
+
+                    b.Navigation("Pricing");
                 });
 #pragma warning restore 612, 618
         }

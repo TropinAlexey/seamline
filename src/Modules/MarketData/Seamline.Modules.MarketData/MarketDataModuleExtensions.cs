@@ -17,6 +17,7 @@ public static class MarketDataModuleExtensions
                 .AddInterceptors(sp.GetRequiredService<TenantSessionVariableInterceptor>()));
 
         services.AddScoped<ICurvePointDirectory, CurvePointDirectory>();
+        services.AddScoped<IIndexFixingDirectory, IndexFixingDirectory>();
 
         return services;
     }

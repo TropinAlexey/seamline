@@ -14,24 +14,42 @@ import { useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { useNavigate } from "react-router";
 import { z } from "zod";
+import { useIndices } from "../../api/queries/marketData";
 import { useCommodities, useCounterparties, useUnitOf } from "../../api/queries/reference";
 import { runTradeAction, useCreateTrade, type TradeSummary } from "../../api/queries/trading";
 import { errorMessage, notifySuccess } from "../../components/notify";
 
 // Mirrors Trade.CreateDraft's guards so obvious mistakes never leave the
 // browser; the server stays authoritative and its 400 text is shown inline.
-const schema = z.object({
-  commodityCode: z.string().trim().min(1, "Commodity is required").max(20),
-  deliveryPeriod: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Pick a delivery month"),
-  direction: z.enum(["Buy", "Sell"]),
-  volume: z.number({ error: "Volume is required" }).positive("Volume must be positive"),
-  price: z.number({ error: "Price is required" }).positive("Price must be positive"),
-  counterpartyId: z.string().min(1, "Counterparty is required"),
-  // Cargo commodities only (ADR-0034); the server rejects them on flow ones.
-  tolerancePct: z.number().min(0).max(20).optional(),
-  laycanFrom: z.string().optional(),
-  laycanTo: z.string().optional(),
-});
+const schema = z
+  .object({
+    commodityCode: z.string().trim().min(1, "Commodity is required").max(20),
+    deliveryPeriod: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Pick a delivery month"),
+    direction: z.enum(["Buy", "Sell"]),
+    volume: z.number({ error: "Volume is required" }).positive("Volume must be positive"),
+    pricingMode: z.enum(["Fixed", "Index"]),
+    price: z.number().positive("Price must be positive").optional(),
+    counterpartyId: z.string().min(1, "Counterparty is required"),
+    // Cargo commodities only (ADR-0034); the server rejects them on flow ones.
+    tolerancePct: z.number().min(0).max(20).optional(),
+    laycanFrom: z.string().optional(),
+    laycanTo: z.string().optional(),
+    // Index pricing (ADR-0035), cargo commodities only as well.
+    indexCode: z.string().optional(),
+    windowFrom: z.string().optional(),
+    windowTo: z.string().optional(),
+    premium: z.number().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.pricingMode === "Fixed" && v.price === undefined)
+      ctx.addIssue({ code: "custom", path: ["price"], message: "Price is required" });
+    if (v.pricingMode === "Index") {
+      if (!v.indexCode)
+        ctx.addIssue({ code: "custom", path: ["indexCode"], message: "Pick an index" });
+      if (!v.windowFrom || !v.windowTo)
+        ctx.addIssue({ code: "custom", path: ["windowTo"], message: "Pick the pricing window" });
+    }
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -47,25 +65,57 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
   const { data: commodities } = useCommodities();
   const unitOf = useUnitOf();
   const { data: counterparties } = useCounterparties();
+  const { data: indices } = useIndices();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const { control, register, handleSubmit, reset, formState } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { commodityCode: "", deliveryPeriod: "", direction: "Buy", counterpartyId: "" },
+    defaultValues: {
+      commodityCode: "",
+      deliveryPeriod: "",
+      direction: "Buy",
+      pricingMode: "Fixed",
+      counterpartyId: "",
+      premium: 0,
+    },
   });
 
   // Volume and price are in the selected commodity's unit (ADR-0033).
   const commodityCode = useWatch({ control, name: "commodityCode" });
   const unit = unitOf(commodityCode) ?? "unit";
   const isCargo = commodities?.find((c) => c.code === commodityCode)?.deliveryModel === "Cargo";
+  const pricingMode = useWatch({ control, name: "pricingMode" });
+  const indexPriced = isCargo && pricingMode === "Index";
 
   const submit = (andSubmit: boolean) =>
     handleSubmit(async (values) => {
       setServerError(null);
       try {
-        const { tolerancePct, laycanFrom, laycanTo, ...trade } = values;
+        const {
+          tolerancePct,
+          laycanFrom,
+          laycanTo,
+          indexCode,
+          windowFrom,
+          windowTo,
+          premium,
+          price,
+        } = values;
         const { id } = await createTrade.mutateAsync({
-          ...trade,
+          commodityCode: values.commodityCode,
+          deliveryPeriod: values.deliveryPeriod,
+          direction: values.direction,
+          volume: values.volume,
+          counterpartyId: values.counterpartyId,
+          price: indexPriced ? null : (price ?? null),
+          indexPricing: indexPriced
+            ? {
+                indexCode: indexCode ?? "",
+                windowFrom: windowFrom ?? "",
+                windowTo: windowTo ?? "",
+                premium: premium ?? 0,
+              }
+            : null,
           cargoTerms: isCargo
             ? {
                 tolerancePct: tolerancePct ?? 0,
@@ -130,6 +180,23 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
               />
             )}
           />
+          {isCargo && (
+            <Controller
+              control={control}
+              name="pricingMode"
+              render={({ field }) => (
+                <SegmentedControl
+                  aria-label="Pricing"
+                  data={[
+                    { value: "Fixed", label: "Fixed price" },
+                    { value: "Index", label: "Index average" },
+                  ]}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          )}
           <Group grow>
             <Controller
               control={control}
@@ -144,20 +211,61 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
                 />
               )}
             />
-            <Controller
-              control={control}
-              name="price"
-              render={({ field, fieldState }) => (
-                <NumberInput
-                  label={`Price (EUR/${unit})`}
-                  value={field.value ?? ""}
-                  onChange={(v) => field.onChange(typeof v === "number" ? v : undefined)}
-                  decimalScale={4}
-                  error={fieldState.error?.message}
-                />
-              )}
-            />
+            {!indexPriced && (
+              <Controller
+                control={control}
+                name="price"
+                render={({ field, fieldState }) => (
+                  <NumberInput
+                    label={`Price (EUR/${unit})`}
+                    value={field.value ?? ""}
+                    onChange={(v) => field.onChange(typeof v === "number" ? v : undefined)}
+                    decimalScale={4}
+                    error={fieldState.error?.message}
+                  />
+                )}
+              />
+            )}
           </Group>
+          {indexPriced && (
+            <Group grow align="flex-start">
+              <Controller
+                control={control}
+                name="indexCode"
+                render={({ field, fieldState }) => (
+                  <Select
+                    label="Index"
+                    data={(indices ?? [])
+                      .filter((i) => i.commodityCode === commodityCode)
+                      .map((i) => ({ value: i.code, label: i.code }))}
+                    value={field.value ?? null}
+                    onChange={(v) => field.onChange(v ?? undefined)}
+                    error={fieldState.error?.message}
+                  />
+                )}
+              />
+              <TextInput type="date" label="Window from" {...register("windowFrom")} />
+              <TextInput
+                type="date"
+                label="Window to"
+                {...register("windowTo")}
+                error={formState.errors.windowTo?.message}
+              />
+              <Controller
+                control={control}
+                name="premium"
+                render={({ field }) => (
+                  <NumberInput
+                    label={`Premium (EUR/${unit})`}
+                    description="May be negative"
+                    value={field.value ?? ""}
+                    onChange={(v) => field.onChange(typeof v === "number" ? v : undefined)}
+                    decimalScale={4}
+                  />
+                )}
+              />
+            </Group>
+          )}
           {isCargo && (
             <Group grow align="flex-start">
               <Controller

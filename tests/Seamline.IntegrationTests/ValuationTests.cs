@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using Npgsql;
 using Seamline.Modules.Identity.Contracts;
 using Seamline.Modules.Risk.Internal;
+using Seamline.Modules.Trading.Contracts;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -27,7 +28,7 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
         var trade = await CreateTradeAsync(client, "POWER", "2027-09", "Buy", 100m, 40m, counterparty.Id);
         var submitResponse = await client.PostAsync($"/trades/{trade.Id}/submit", content: null);
         submitResponse.EnsureSuccessStatusCode();
-        await PollForSinglePositionAsync(client);
+        await factory.Bus.Consumed<TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
 
         var curveResponse = await marketDataClient.PostAsJsonAsync(
             "/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2027-09", price = 46m });
@@ -35,7 +36,9 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
 
         await factory.Services.RunEndOfDayValuationAsync(CancellationToken.None);
 
-        var snapshot = await PollForValuationSnapshotAsync(tenantId, "POWER", "2027-09");
+        // The EOD run is awaited directly: nothing asynchronous left to wait for.
+        var snapshot = await TryFindValuationSnapshotAsync(tenantId, "POWER", "2027-09");
+        Assert.NotNull(snapshot);
         Assert.Equal(100m, snapshot.NetVolume);
         Assert.Equal(40m, snapshot.WeightedAvgPrice);
         Assert.Equal(46m, snapshot.CurvePrice);
@@ -53,11 +56,11 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
         var counterparty = await CreateCounterpartyAsync(client, "Bravo Trading", 1_000_000m);
         var trade = await CreateTradeAsync(client, "GAS", "2027-10", "Buy", 50m, 20m, counterparty.Id);
         await (await client.PostAsync($"/trades/{trade.Id}/submit", content: null)).Content.ReadAsStringAsync();
-        await PollForSinglePositionAsync(client);
+        await factory.Bus.Consumed<TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
 
         var deliverResponse = await client.PostAsync($"/trades/{trade.Id}/deliver", content: null);
         deliverResponse.EnsureSuccessStatusCode();
-        await PollForFlatPositionAsync(client, "GAS", "2027-10");
+        await factory.Bus.Consumed<TradeDeliveredConsumer, TradeDelivered>(m => m.TradeId == trade.Id);
 
         await marketDataClient.PostAsJsonAsync("/curve-points/", new { commodityCode = "GAS", deliveryPeriod = "2027-10", price = 25m });
 
@@ -90,55 +93,6 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
         return (await response.Content.ReadFromJsonAsync<TradeIdDto>())!;
     }
 
-    private static async Task PollForSinglePositionAsync(HttpClient client)
-    {
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            var positions = await client.GetPositionsAsync<PositionDto>();
-            if (positions is { Count: 1 })
-                return;
-            await Task.Delay(250);
-        }
-
-        Assert.Fail("No position appeared within the poll window.");
-    }
-
-    // Delivering a trade nets its Position row back to zero (Risk's own
-    // TradeDeliveredConsumer closes it out, see ADR-0014); GET /positions
-    // leaves flat rows out (ADR-0031), so "closed" means the row is gone.
-    private static async Task PollForFlatPositionAsync(HttpClient client, string commodityCode, string deliveryPeriod)
-    {
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            var positions = await client.GetPositionsAsync<PositionDto>();
-            var match = positions?.FirstOrDefault(p => p.CommodityCode == commodityCode && p.DeliveryPeriod == deliveryPeriod);
-            if (match is null or { NetVolume: 0m })
-                return;
-            await Task.Delay(250);
-        }
-
-        Assert.Fail($"Position for {commodityCode}/{deliveryPeriod} never nettled back to zero within the poll window.");
-    }
-
-    // The valuation run itself is synchronous (awaited directly, not
-    // published over the bus), but Deliver's TradeDelivered dispatch and
-    // this test's own PollForEmptyPositionsAsync above already establish
-    // eventual consistency for the position; a short poll here just
-    // absorbs any residual timing slack from the outbox.
-    private async Task<ValuationSnapshotRow> PollForValuationSnapshotAsync(Guid tenantId, string commodityCode, string deliveryPeriod)
-    {
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            var snapshot = await TryFindValuationSnapshotAsync(tenantId, commodityCode, deliveryPeriod);
-            if (snapshot is not null)
-                return snapshot;
-            await Task.Delay(250);
-        }
-
-        Assert.Fail($"No valuation_snapshot row appeared for {commodityCode}/{deliveryPeriod} within the poll window.");
-        return default!; // unreachable — Assert.Fail throws
-    }
-
     private async Task<ValuationSnapshotRow?> TryFindValuationSnapshotAsync(Guid tenantId, string commodityCode, string deliveryPeriod)
     {
         await using var connection = new NpgsqlConnection(factory.ConnectionString);
@@ -164,8 +118,6 @@ public sealed class ValuationTests(SeamlineApiFactory factory) : IClassFixture<S
     private sealed record CounterpartyDto(Guid Id, string Name, decimal CreditLimit);
 
     private sealed record TradeIdDto(Guid Id);
-
-    private sealed record PositionDto(string CommodityCode, string DeliveryPeriod, decimal NetVolume);
 
     private sealed record ValuationSnapshotRow(decimal NetVolume, decimal WeightedAvgPrice, decimal CurvePrice, decimal MtmAmount);
 }

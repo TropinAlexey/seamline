@@ -3,6 +3,7 @@
 ## Status
 
 Accepted
+**Extended by:** [ADR-0039](0039-integration-tests-wait-for-consumers.md) (integration tests wait for the consumer they depend on, not for a clock).
 
 ## Context
 

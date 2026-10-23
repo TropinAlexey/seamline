@@ -75,7 +75,13 @@ README.
   model, quality spec — `docs/adr/0033-commodity-master-data.md`). Never
   hard-code a commodity list; one currency, EUR.
 - Monthly delivery periods for positions, curves and valuation. A cargo's
-  laycan dates sit inside its month (ADR-0032).
+  laycan dates and an index trade's pricing window sit inside its month
+  (ADR-0032).
+- A coal trade is fixed-price or index-priced: the average of daily index
+  fixings over a window plus a premium (`docs/adr/0035`, `0038`). Fixings
+  are append-only; the expected price is computed only in Risk
+  (`IFormulaPricingService`); back office confirms the final price. Power
+  and gas stay fixed-price (REMIT).
 - Mark-to-market: `(forward_price - trade_price) * volume`. No curve
   interpolation, shaping, or cascading — flat monthly points.
 - No VaR. Stress scenarios instead.

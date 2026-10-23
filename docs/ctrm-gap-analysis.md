@@ -28,7 +28,7 @@ are what this page measures Seamline against.
 | **Volume actualization** | **Implemented.** `ActualVolume` from the B/L next to the contract `Volume`, within the tolerance band (else 409, amend first). The invoice uses the actual quantity; the position closes the contract quantity. | Contract quantity ± tolerance; the actual quantity comes from the B/L and drives invoicing and position close-out. | Closed. | [Spec 01](specs/01-coal-cargo.md), [ADR-0034](adr/0034-coal-cargo-logistics.md), [ADR-0037](adr/0037-shipment-lives-in-trading.md) |
 | **Quality** | **Implemented for coal.** The contract spec is snapshotted at booking. The certificate is judged against the rejection limits, and the price is adjusted pro rata to calorific value. | Contract quality specification, measured quality from a certificate, price adjustment and rejection limits. | Closed. Penalties beyond the NAR adjustment and claims are out of scope. | [Spec 01](specs/01-coal-cargo.md), [ADR-0034](adr/0034-coal-cargo-logistics.md), [ADR-0037](adr/0037-shipment-lives-in-trading.md) |
 | **Settlement lifecycle** | **Implemented.** Invoices are `Standard` (flow), or `Provisional` at loading and `Final` after the certificate with the balance. | Provisional invoice on loading, final invoice once quantity, quality and price are known; the difference is settled. | Closed. A payment lifecycle is still deferred (ADR-0012). | [Spec 01](specs/01-coal-cargo.md), [ADR-0034](adr/0034-coal-cargo-logistics.md), [ADR-0037](adr/0037-shipment-lives-in-trading.md) |
-| **Pricing** | Fixed `decimal Price` per trade. Monthly curve points only; no daily prices are stored ([ADR-0012](adr/0012-marketdata-settlement-first-entities.md), [ADR-0018](adr/0018-curve-import.md)). | Formula prices: average of an index over a pricing window plus a premium; daily fixings; fixed vs unfixed exposure. | No index, no fixings, no formula. | [Spec 03](specs/03-formula-pricing.md), [ADR-0035](adr/0035-formula-pricing.md) |
+| **Pricing** | **Implemented for coal.** A trade is fixed-price, or the average of an index over a pricing window plus a premium. Daily fixings are append-only in MarketData; curve points stay monthly and refreshed in place. Risk computes the expected price, fixed vs unfixed quantity, and MtM and stress of the fixed share, per trade. Back office confirms the final price, which feeds the final invoice. | Formula prices: average of an index over a pricing window plus a premium; daily fixings; fixed vs unfixed exposure. | Closed for coal. Fixing corrections, holiday calendars, other averaging methods and index-priced gas are out of scope. | [Spec 03](specs/03-formula-pricing.md), [ADR-0035](adr/0035-formula-pricing.md), [ADR-0038](adr/0038-price-fixing-is-confirmed-in-trading.md) |
 | **Inventory** | None. `Position` is contractual exposure per (commodity, period), not stock ([ADR-0014](adr/0014-valuation-worker.md)). | Storage capacity, injections and withdrawals, stock valued at weighted average cost, unrealized P&L on stock. | No storage, no stock ledger. | [Spec 02](specs/02-gas-storage.md), [ADR-0036](adr/0036-gas-storage-inventory.md) |
 
 What Seamline already does well and keeps: the trade lifecycle with a
@@ -48,6 +48,7 @@ integration and E2E tests, README) before the next one starts
    invoices. **Done** (the shipment lives in Trading, ADR-0037).
 3. Formula pricing: index fixings, pricing windows, fixed vs unfixed
    exposure. It reuses the provisional/final invoice from step 2.
+   **Done** (back office confirms the final price, ADR-0038).
 4. Gas storage: inventory and WACOG.
 
 ## Wording rules
@@ -57,8 +58,8 @@ integration and E2E tests, README) before the next one starts
 - **Specified** means an ADR and a spec exist, but no code. README lists
   specified processes as such and links to the spec.
 - The README tagline and the CLAUDE.md scope boundaries change only when a
-  step is implemented. Since step 2, Seamline is "an ETRM core for power
-  and gas plus coal cargoes", with formula pricing and gas storage still
-  specified only.
+  step is implemented. Since step 3, Seamline is "an ETRM core for power
+  and gas plus coal cargoes, fixed-price or index-priced", with gas storage
+  still specified only.
 - Every simplification stays stated, as before: no options, no VaR, single
   currency, simplified REMIT.

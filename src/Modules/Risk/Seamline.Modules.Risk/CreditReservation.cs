@@ -18,7 +18,10 @@ internal sealed class CreditReservation : TenantOwnedEntity<Guid>
     public string CommodityCode { get; private set; } = string.Empty;
     public string DeliveryPeriod { get; private set; } = string.Empty;
     public decimal SignedVolume { get; private set; }
-    public decimal TradePrice { get; private set; }
+    // Null for an index-priced trade (ADR-0035): its exposure is measured at
+    // the expected price, recomputed from Pricing on every check.
+    public decimal? TradePrice { get; private set; }
+    public IndexPricingTerms? Pricing { get; private set; }
     public decimal Amount { get; private set; }
     public CreditReservationStatus Status { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -28,7 +31,7 @@ internal sealed class CreditReservation : TenantOwnedEntity<Guid>
     public static CreditReservation Create(
         TenantId tenantId, Guid counterpartyId, Guid tradeId,
         string commodityCode, string deliveryPeriod,
-        decimal signedVolume, decimal tradePrice,
+        decimal signedVolume, decimal? tradePrice, IndexPricingTerms? pricing,
         decimal exposureAmount, CreditReservationStatus status)
     {
         return new CreditReservation
@@ -41,6 +44,7 @@ internal sealed class CreditReservation : TenantOwnedEntity<Guid>
             DeliveryPeriod = deliveryPeriod,
             SignedVolume = signedVolume,
             TradePrice = tradePrice,
+            Pricing = pricing,
             Amount = exposureAmount,
             Status = status,
             CreatedAt = DateTimeOffset.UtcNow
@@ -55,7 +59,7 @@ internal sealed class CreditReservation : TenantOwnedEntity<Guid>
     // otherwise exposure would keep being measured on terms that no longer
     // exist. Amend deliberately doesn't re-run the credit check (Trade.Amend),
     // so this can't be refused; it only keeps the numbers truthful.
-    public void Amend(decimal signedVolume, decimal tradePrice, decimal exposureAmount)
+    public void Amend(decimal signedVolume, decimal? tradePrice, decimal exposureAmount)
     {
         SignedVolume = signedVolume;
         TradePrice = tradePrice;

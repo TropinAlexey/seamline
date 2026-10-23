@@ -50,4 +50,18 @@ public class SyntheticCurveSourceTests
 
         Assert.NotEqual(august, september);
     }
+
+    [Fact]
+    public async Task DailyFixing_is_deterministic_and_stays_within_two_percent_of_the_months_price()
+    {
+        var source = new SyntheticCurveSource();
+        var monthly = (await source.GetMonthlyAveragePriceAsync("COAL", new DateOnly(2027, 3, 1)))!.Value;
+
+        foreach (var day in Enumerable.Range(1, 31).Select(d => new DateOnly(2027, 3, d)))
+        {
+            var fixing = source.DailyFixing("COAL", day);
+            Assert.Equal(fixing, source.DailyFixing("COAL", day));
+            Assert.InRange(fixing, monthly * 0.98m, monthly * 1.02m);
+        }
+    }
 }

@@ -73,7 +73,7 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("trade_id");
 
-                    b.Property<decimal>("TradePrice")
+                    b.Property<decimal?>("TradePrice")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("trade_price");
@@ -83,6 +83,58 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                     b.HasIndex("TradeId");
 
                     b.ToTable("credit_reservation", "risk");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.Risk.Internal.FormulaTrade", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CommodityCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("commodity_code");
+
+                    b.Property<string>("DeliveryPeriod")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("delivery_period");
+
+                    b.Property<decimal?>("FinalPrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("final_price");
+
+                    b.Property<bool>("IsDelivered")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_delivered");
+
+                    b.Property<bool>("IsOpen")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_open");
+
+                    b.Property<decimal>("SignedVolume")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("signed_volume");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TradeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trade_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TradeId")
+                        .IsUnique();
+
+                    b.ToTable("formula_trade", "risk");
                 });
 
             modelBuilder.Entity("Seamline.Modules.Risk.Internal.Position", b =>
@@ -177,6 +229,10 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<Guid?>("TradeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trade_id");
+
                     b.Property<DateTimeOffset>("ValuedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("valued_at");
@@ -240,6 +296,10 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<Guid?>("TradeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trade_id");
+
                     b.Property<DateTimeOffset>("ValuedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("valued_at");
@@ -256,6 +316,81 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                     b.HasIndex("TenantId", "CommodityCode", "DeliveryPeriod", "ValuedAt");
 
                     b.ToTable("valuation_snapshot", "risk");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.Risk.Internal.CreditReservation", b =>
+                {
+                    b.OwnsOne("Seamline.SharedKernel.IndexPricingTerms", "Pricing", b1 =>
+                        {
+                            b1.Property<Guid>("CreditReservationId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("IndexCode")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("pricing_index_code");
+
+                            b1.Property<decimal>("Premium")
+                                .HasPrecision(18, 4)
+                                .HasColumnType("numeric(18,4)")
+                                .HasColumnName("pricing_premium");
+
+                            b1.Property<DateOnly>("WindowFrom")
+                                .HasColumnType("date")
+                                .HasColumnName("pricing_window_from");
+
+                            b1.Property<DateOnly>("WindowTo")
+                                .HasColumnType("date")
+                                .HasColumnName("pricing_window_to");
+
+                            b1.HasKey("CreditReservationId");
+
+                            b1.ToTable("credit_reservation", "risk");
+
+                            b1.WithOwner()
+                                .HasForeignKey("CreditReservationId");
+                        });
+
+                    b.Navigation("Pricing");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.Risk.Internal.FormulaTrade", b =>
+                {
+                    b.OwnsOne("Seamline.SharedKernel.IndexPricingTerms", "Pricing", b1 =>
+                        {
+                            b1.Property<Guid>("FormulaTradeId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("IndexCode")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("pricing_index_code");
+
+                            b1.Property<decimal>("Premium")
+                                .HasPrecision(18, 4)
+                                .HasColumnType("numeric(18,4)")
+                                .HasColumnName("pricing_premium");
+
+                            b1.Property<DateOnly>("WindowFrom")
+                                .HasColumnType("date")
+                                .HasColumnName("pricing_window_from");
+
+                            b1.Property<DateOnly>("WindowTo")
+                                .HasColumnType("date")
+                                .HasColumnName("pricing_window_to");
+
+                            b1.HasKey("FormulaTradeId");
+
+                            b1.ToTable("formula_trade", "risk");
+
+                            b1.WithOwner()
+                                .HasForeignKey("FormulaTradeId");
+                        });
+
+                    b.Navigation("Pricing")
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

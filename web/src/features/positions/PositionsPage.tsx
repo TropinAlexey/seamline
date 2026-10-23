@@ -1,5 +1,7 @@
-import { Badge, Group, Stack, Table, Tabs, Text, Title } from "@mantine/core";
-import { useLatestValuation, usePositions } from "../../api/queries/risk";
+import { Anchor, Badge, Group, Stack, Table, Tabs, Text, Title } from "@mantine/core";
+import { Link } from "react-router";
+import { useSession } from "../../auth/AuthContext";
+import { useLatestValuation, usePositions, usePricingExposure } from "../../api/queries/risk";
 import { QueryState } from "../../components/QueryState";
 import { formatDateTime } from "../../format/date";
 import { formatAmount, formatPrice, formatVolume } from "../../format/money";
@@ -71,6 +73,65 @@ function LivePositions() {
   );
 }
 
+// Index-priced trades (ADR-0035) are valued one by one, never blended into
+// a position: MtM comes only from the days already fixed.
+function FormulaTrades() {
+  const session = useSession();
+  const exposure = usePricingExposure(session.role !== "BO");
+  if (!exposure.data?.items.length) return null;
+  return (
+    <Stack gap="xs" mt="lg">
+      <Title order={4}>Index-priced trades</Title>
+      <Text size="sm" c="dimmed">
+        The unfixed days move with the forward on both sides, so only the fixed share carries price
+        risk.
+      </Text>
+      <Table striped data-testid="formula-trades">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Trade</Table.Th>
+            <Table.Th>Period</Table.Th>
+            <Table.Th>Index</Table.Th>
+            <Table.Th ta="right">Days fixed</Table.Th>
+            <Table.Th ta="right">Fixed qty</Table.Th>
+            <Table.Th ta="right">Unfixed qty</Table.Th>
+            <Table.Th ta="right">Expected</Table.Th>
+            <Table.Th ta="right">Forward</Table.Th>
+            <Table.Th ta="right">MTM</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {exposure.data.items.map((t) => (
+            <Table.Tr key={t.tradeId}>
+              <Table.Td>
+                <Anchor component={Link} to={`/trades/${t.tradeId}`} ff="monospace" size="sm">
+                  {t.commodityCode} {t.tradeId.slice(0, 8)}
+                </Anchor>
+              </Table.Td>
+              <Table.Td>{t.deliveryPeriod}</Table.Td>
+              <Table.Td>{t.indexCode}</Table.Td>
+              <Table.Td ta="right">
+                {t.fixedDays} / {t.pricingDays}
+              </Table.Td>
+              <Table.Td ta="right">{formatVolume(t.fixedQuantity)}</Table.Td>
+              <Table.Td ta="right">{formatVolume(t.unfixedQuantity)}</Table.Td>
+              <Table.Td ta="right">{formatPrice(t.finalPrice ?? t.expectedPrice)}</Table.Td>
+              <Table.Td ta="right">{formatPrice(t.forward)}</Table.Td>
+              <Table.Td ta="right">{formatAmount(t.mtmAmount)}</Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+        <Table.Tfoot>
+          <Table.Tr>
+            <Table.Th colSpan={8}>Total</Table.Th>
+            <Table.Th ta="right">{formatAmount(exposure.data.totalMtm)}</Table.Th>
+          </Table.Tr>
+        </Table.Tfoot>
+      </Table>
+    </Stack>
+  );
+}
+
 function EodSnapshot() {
   const valuation = useLatestValuation();
   return (
@@ -100,8 +161,15 @@ function EodSnapshot() {
             </Table.Thead>
             <Table.Tbody>
               {valuation.data.items.map((v) => (
-                <Table.Tr key={`${v.commodityCode}-${v.deliveryPeriod}`}>
-                  <Table.Td>{v.commodityCode}</Table.Td>
+                <Table.Tr key={`${v.commodityCode}-${v.deliveryPeriod}-${v.tradeId ?? "position"}`}>
+                  <Table.Td>
+                    {v.commodityCode}
+                    {v.tradeId && (
+                      <Text span size="xs" c="dimmed" ml={4}>
+                        (index trade {v.tradeId.slice(0, 8)})
+                      </Text>
+                    )}
+                  </Table.Td>
                   <Table.Td>{v.deliveryPeriod}</Table.Td>
                   <Table.Td ta="right">{formatVolume(v.netVolume)}</Table.Td>
                   <Table.Td ta="right">{formatPrice(v.weightedAvgPrice)}</Table.Td>
@@ -143,6 +211,7 @@ export function PositionsPage() {
         </Tabs.List>
         <Tabs.Panel value="live" pt="md">
           <LivePositions />
+          <FormulaTrades />
         </Tabs.Panel>
         <Tabs.Panel value="eod" pt="md">
           <EodSnapshot />

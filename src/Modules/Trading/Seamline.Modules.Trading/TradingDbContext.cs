@@ -37,6 +37,15 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
             builder.Property(t => t.LastChangedAt).HasColumnName("last_changed_at");
             builder.Property(t => t.ActualVolume).HasColumnName("actual_volume").HasPrecision(18, 3);
 
+            // Index pricing (ADR-0035). Null for a fixed-price trade.
+            builder.OwnsOne(t => t.Pricing, pricing =>
+            {
+                pricing.Property(p => p.IndexCode).HasColumnName("pricing_index_code").HasMaxLength(20).IsRequired();
+                pricing.Property(p => p.WindowFrom).HasColumnName("pricing_window_from");
+                pricing.Property(p => p.WindowTo).HasColumnName("pricing_window_to");
+                pricing.Property(p => p.Premium).HasColumnName("pricing_premium").HasPrecision(18, 4);
+            });
+
             builder.OwnsOne(t => t.CargoTerms, terms =>
             {
                 terms.Property(c => c.TolerancePct).HasColumnName("cargo_tolerance_pct").HasPrecision(5, 2);

@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Specified, not yet implemented ([spec 03](../specs/03-formula-pricing.md)).
+Accepted. Implemented ([spec 03](../specs/03-formula-pricing.md)).
+**Amended in part by:** [ADR-0038](0038-price-fixing-is-confirmed-in-trading.md) (no `IndexFixingPublished` event; back office confirms the final price in Trading).
 
 ## Context
 

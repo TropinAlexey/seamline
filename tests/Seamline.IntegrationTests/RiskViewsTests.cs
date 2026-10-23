@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using Seamline.Modules.Identity.Contracts;
 using Seamline.Modules.Risk.Internal;
+using Seamline.Modules.Trading.Contracts;
+using Audit = Seamline.Modules.Audit.Internal;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -29,7 +31,8 @@ public sealed class RiskViewsTests(SeamlineApiFactory factory) : IClassFixture<S
 
         (await trader.PostAsync($"/trades/{trade.Id}/deliver", content: null)).EnsureSuccessStatusCode();
 
-        var exposure = await PollExposureAsync(trader, counterparty.Id, expected: 0m);
+        await factory.Bus.Consumed<TradeDeliveredConsumer, TradeDelivered>(m => m.TradeId == trade.Id);
+        var exposure = await GetExposureAsync(trader, counterparty.Id);
         Assert.Equal(0m, exposure.CurrentExposure);
         Assert.Equal(1_000_000m, exposure.CreditLimit);
     }
@@ -46,7 +49,8 @@ public sealed class RiskViewsTests(SeamlineApiFactory factory) : IClassFixture<S
         (await trader.PostAsJsonAsync($"/trades/{trade.Id}/amend", new { volume = 200m, price = 50m, reason = "Volume correction" }))
             .EnsureSuccessStatusCode();
 
-        Assert.Equal(10_000m, (await PollExposureAsync(trader, counterparty.Id, expected: 10_000m)).CurrentExposure);
+        await factory.Bus.Consumed<TradeAmendedConsumer, TradeAmended>(m => m.TradeId == trade.Id);
+        Assert.Equal(10_000m, (await GetExposureAsync(trader, counterparty.Id)).CurrentExposure);
     }
 
     [Fact]
@@ -73,7 +77,8 @@ public sealed class RiskViewsTests(SeamlineApiFactory factory) : IClassFixture<S
         (await risk.PostAsJsonAsync("/curve-points/", new { commodityCode = "POWER", deliveryPeriod = "2031-10", price = 46m }))
             .EnsureSuccessStatusCode();
 
-        var positions = await PollPositionsAsync(trader, p => p.Items.Count == 1);
+        await factory.Bus.Consumed<TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
+        var positions = (await trader.GetFromJsonAsync<PositionsDto>("/positions"))!;
 
         var position = Assert.Single(positions.Items);
         Assert.Equal(40m, position.WeightedAvgPrice);
@@ -93,7 +98,7 @@ public sealed class RiskViewsTests(SeamlineApiFactory factory) : IClassFixture<S
         (await trader.PostAsync($"/trades/{trade.Id}/submit", content: null)).EnsureSuccessStatusCode();
         (await risk.PostAsJsonAsync("/curve-points/", new { commodityCode = "GAS", deliveryPeriod = "2031-09", price = 46m }))
             .EnsureSuccessStatusCode();
-        await PollPositionsAsync(trader, p => p.Items.Count == 1);
+        await factory.Bus.Consumed<TradeActivatedConsumer, TradeActivated>(m => m.TradeId == trade.Id);
 
         await factory.Services.RunEndOfDayValuationAsync(CancellationToken.None);
         var first = await risk.GetFromJsonAsync<ValuationRunDto>("/valuations/latest");
@@ -135,7 +140,11 @@ public sealed class RiskViewsTests(SeamlineApiFactory factory) : IClassFixture<S
         var cancelled = await CreateTradeAsync(trader, "POWER", NoCurvePeriod, 10m, 50m, counterparty.Id);
         (await trader.PostAsync($"/trades/{cancelled.Id}/cancel", content: null)).EnsureSuccessStatusCode();
 
-        var deliveredTrail = await PollAuditAsync(backOffice, delivered.Id, expectedCount: 4);
+        await factory.Bus.Consumed<Audit.TradeCreatedAuditConsumer, TradeCreated>(m => m.TradeId == delivered.Id);
+        await factory.Bus.Consumed<Audit.TradeSubmittedAuditConsumer, TradeSubmitted>(m => m.TradeId == delivered.Id);
+        await factory.Bus.Consumed<Audit.TradeActivatedAuditConsumer, TradeActivated>(m => m.TradeId == delivered.Id);
+        await factory.Bus.Consumed<Audit.TradeDeliveredAuditConsumer, TradeDelivered>(m => m.TradeId == delivered.Id);
+        var deliveredTrail = await GetAuditAsync(backOffice, delivered.Id);
         // OccurredAt is when Audit consumed the event, and consumers run
         // concurrently — compare as a set, not a sequence.
         Assert.Equal(
@@ -143,7 +152,9 @@ public sealed class RiskViewsTests(SeamlineApiFactory factory) : IClassFixture<S
             deliveredTrail.Items.Select(e => e.Action).Order());
         Assert.Equal(traderLogin, deliveredTrail.Items.Single(e => e.Action == "TradeDelivered").Actor);
 
-        var cancelledTrail = await PollAuditAsync(backOffice, cancelled.Id, expectedCount: 2);
+        await factory.Bus.Consumed<Audit.TradeCreatedAuditConsumer, TradeCreated>(m => m.TradeId == cancelled.Id);
+        await factory.Bus.Consumed<Audit.TradeCancelledAuditConsumer, TradeCancelled>(m => m.TradeId == cancelled.Id);
+        var cancelledTrail = await GetAuditAsync(backOffice, cancelled.Id);
         Assert.Contains(cancelledTrail.Items, e => e.Action == "TradeCancelled" && e.Actor == traderLogin);
 
         Assert.Equal(HttpStatusCode.Forbidden, (await trader.GetAsync("/audit-events")).StatusCode);
@@ -154,44 +165,8 @@ public sealed class RiskViewsTests(SeamlineApiFactory factory) : IClassFixture<S
     private static async Task<ExposureDto> GetExposureAsync(HttpClient client, Guid counterpartyId)
         => (await client.GetFromJsonAsync<ExposureDto>($"/counterparties/{counterpartyId}/exposure"))!;
 
-    private static async Task<ExposureDto> PollExposureAsync(HttpClient client, Guid counterpartyId, decimal expected)
-    {
-        ExposureDto exposure = null!;
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            exposure = await GetExposureAsync(client, counterpartyId);
-            if (exposure.CurrentExposure == expected)
-                break;
-            await Task.Delay(250);
-        }
-        return exposure;
-    }
-
-    private static async Task<PositionsDto> PollPositionsAsync(HttpClient client, Func<PositionsDto, bool> done)
-    {
-        PositionsDto positions = null!;
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            positions = (await client.GetFromJsonAsync<PositionsDto>("/positions"))!;
-            if (done(positions) && positions.Items.All(p => p.MtmAmount is not null))
-                break;
-            await Task.Delay(250);
-        }
-        return positions;
-    }
-
-    private static async Task<AuditPageDto> PollAuditAsync(HttpClient client, Guid entityId, int expectedCount)
-    {
-        AuditPageDto page = null!;
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            page = (await client.GetFromJsonAsync<AuditPageDto>($"/audit-events?entityId={entityId}"))!;
-            if (page.Total >= expectedCount)
-                break;
-            await Task.Delay(250);
-        }
-        return page;
-    }
+    private static async Task<AuditPageDto> GetAuditAsync(HttpClient client, Guid entityId)
+        => (await client.GetFromJsonAsync<AuditPageDto>($"/audit-events?entityId={entityId}"))!;
 
     private static async Task<CounterpartyDto> CreateCounterpartyAsync(HttpClient client, decimal creditLimit)
     {

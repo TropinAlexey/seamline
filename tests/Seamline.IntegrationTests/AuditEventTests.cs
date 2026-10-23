@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using Npgsql;
 using Seamline.Modules.Identity.Contracts;
+using Seamline.Modules.Trading.Contracts;
+using Audit = Seamline.Modules.Audit.Internal;
 using Xunit;
 
 namespace Seamline.IntegrationTests;
@@ -22,7 +24,8 @@ public sealed class AuditEventTests(SeamlineApiFactory factory) : IClassFixture<
         var submitResponse = await client.PostAsync($"/trades/{trade.Id}/submit", content: null);
         submitResponse.EnsureSuccessStatusCode();
 
-        var row = await PollForAuditEventAsync(tenantId, trade.Id, "TradeActivated");
+        await factory.Bus.Consumed<Audit.TradeActivatedAuditConsumer, TradeActivated>(m => m.TradeId == trade.Id);
+        var row = await ReadAuditEventAsync(tenantId, trade.Id, "TradeActivated");
 
         Assert.Equal("system", row.Actor);
         Assert.Equal("TradeActivated", row.Action);
@@ -45,7 +48,8 @@ public sealed class AuditEventTests(SeamlineApiFactory factory) : IClassFixture<
         var rejectResponse = await moClient.PostAsync($"/trades/{trade.Id}/reject", content: null);
         rejectResponse.EnsureSuccessStatusCode();
 
-        var row = await PollForAuditEventAsync(tenantId, trade.Id, "TradeRejected");
+        await factory.Bus.Consumed<Audit.TradeRejectedAuditConsumer, TradeRejected>(m => m.TradeId == trade.Id);
+        var row = await ReadAuditEventAsync(tenantId, trade.Id, "TradeRejected");
 
         // The MO user who rejected, not "system" — only a timeout is a system decision (ADR-0030).
         Assert.Equal(riskLogin, row.Actor);
@@ -69,36 +73,30 @@ public sealed class AuditEventTests(SeamlineApiFactory factory) : IClassFixture<
             $"/trades/{trade.Id}/amend", new { volume = 250m, price = 31m, reason = "Volume correction" });
         amendResponse.EnsureSuccessStatusCode();
 
-        var row = await PollForAuditEventAsync(tenantId, trade.Id, "TradeAmended");
+        await factory.Bus.Consumed<Audit.TradeAmendedAuditConsumer, TradeAmended>(m => m.TradeId == trade.Id);
+        var row = await ReadAuditEventAsync(tenantId, trade.Id, "TradeAmended");
 
         Assert.Equal(login, row.Actor);
         Assert.Equal("TradeAmended", row.Action);
         Assert.Equal("Trade", row.EntityType);
     }
 
-    private async Task<AuditRow> PollForAuditEventAsync(Guid tenantId, Guid tradeId, string expectedAction)
+    // Read straight from the table through the owner connection: the test
+    // proves the row exists with the right actor, not the HTTP read model.
+    private async Task<AuditRow> ReadAuditEventAsync(Guid tenantId, Guid tradeId, string expectedAction)
     {
         await using var connection = new NpgsqlConnection(factory.ConnectionString);
         await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT actor, action, entity_type FROM audit.audit_event WHERE tenant_id = @tenantId AND entity_id = @tradeId AND action = @action";
+        command.Parameters.AddWithValue("tenantId", tenantId);
+        command.Parameters.AddWithValue("tradeId", tradeId);
+        command.Parameters.AddWithValue("action", expectedAction);
 
-        for (var attempt = 0; attempt < 40; attempt++)
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText =
-                "SELECT actor, action, entity_type FROM audit.audit_event WHERE tenant_id = @tenantId AND entity_id = @tradeId AND action = @action";
-            command.Parameters.AddWithValue("tenantId", tenantId);
-            command.Parameters.AddWithValue("tradeId", tradeId);
-            command.Parameters.AddWithValue("action", expectedAction);
-
-            await using var reader = await command.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-                return new AuditRow(reader.GetString(0), reader.GetString(1), reader.GetString(2));
-
-            await Task.Delay(250);
-        }
-
-        Assert.Fail($"No audit.audit_event row with action '{expectedAction}' appeared for trade {tradeId} within the poll window.");
-        return default!;
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync(), $"No audit.audit_event row with action '{expectedAction}' for trade {tradeId}.");
+        return new AuditRow(reader.GetString(0), reader.GetString(1), reader.GetString(2));
     }
 
     private static async Task<CounterpartyDto> CreateCounterpartyAsync(HttpClient client, decimal creditLimit)

@@ -47,8 +47,7 @@ internal sealed record CargoTerms
     public void RequireLaycanWithin(string deliveryPeriod)
     {
         DeliveryPeriodFormat.Validate(deliveryPeriod);
-        var period = $"{LaycanFrom:yyyy-MM}";
-        if (period != deliveryPeriod || $"{LaycanTo:yyyy-MM}" != deliveryPeriod)
+        if (!DeliveryPeriodFormat.Contains(deliveryPeriod, LaycanFrom) || !DeliveryPeriodFormat.Contains(deliveryPeriod, LaycanTo))
             throw new ArgumentException($"The laycan must lie within the delivery period {deliveryPeriod}.");
     }
 

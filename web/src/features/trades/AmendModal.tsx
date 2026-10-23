@@ -14,15 +14,17 @@ export function AmendModal({
 }) {
   const amend = useAmendTrade(trade.id);
   const [volume, setVolume] = useState<number | "">(trade.volume);
-  const [price, setPrice] = useState<number | "">(trade.price);
+  // An index-priced trade amends its volume only (ADR-0035).
+  const indexPriced = trade.pricing != null;
+  const [price, setPrice] = useState<number | "">(trade.price ?? "");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    if (volume === "" || volume <= 0 || price === "" || price <= 0) {
-      setError("Volume and price must be positive.");
+    if (volume === "" || volume <= 0 || (!indexPriced && (price === "" || price <= 0))) {
+      setError(indexPriced ? "Volume must be positive." : "Volume and price must be positive.");
       return;
     }
     if (!reason.trim()) {
@@ -30,7 +32,11 @@ export function AmendModal({
       return;
     }
     try {
-      await amend.mutateAsync({ volume, price, reason: reason.trim() });
+      await amend.mutateAsync({
+        volume,
+        price: indexPriced || price === "" ? null : price,
+        reason: reason.trim(),
+      });
       notifySuccess("Trade amended — new version recorded.");
       setReason("");
       onClose();
@@ -50,12 +56,14 @@ export function AmendModal({
               onChange={(v) => setVolume(typeof v === "number" ? v : "")}
               decimalScale={3}
             />
-            <NumberInput
-              label="Price"
-              value={price}
-              onChange={(v) => setPrice(typeof v === "number" ? v : "")}
-              decimalScale={4}
-            />
+            {!indexPriced && (
+              <NumberInput
+                label="Price"
+                value={price}
+                onChange={(v) => setPrice(typeof v === "number" ? v : "")}
+                decimalScale={4}
+              />
+            )}
           </Group>
           <Textarea
             label="Reason"

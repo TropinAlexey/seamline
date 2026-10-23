@@ -33,11 +33,12 @@ public static class SettlementModuleExtensions
         await migrationContext.MigrateWithLockAsync();
     }
 
-    // Settlement never publishes — it's a pure sink for TradeDelivered and
-    // CargoQualityCertified, same shape as Audit's consumers (ADR-0010).
+    // Settlement never publishes — it's a pure sink for TradeDelivered,
+    // CargoQualityCertified and TradePriceFixed, same shape as Audit's consumers (ADR-0010).
     public static void AddSettlementMassTransitConfiguration(this IBusRegistrationConfigurator configurator)
     {
         configurator.AddConsumer<TradeDeliveredConsumer>();
         configurator.AddConsumer<CargoQualityCertifiedConsumer>();
+        configurator.AddConsumer<TradePriceFixedConsumer>();
     }
 }

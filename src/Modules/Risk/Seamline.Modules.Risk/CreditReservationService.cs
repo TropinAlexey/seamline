@@ -13,7 +13,8 @@ internal sealed class CreditReservationService(
     public async Task<CreditReservationResult> TryReserveAsync(
         Guid tenantId, Guid counterpartyId, Guid tradeId,
         string commodityCode, string deliveryPeriod,
-        decimal signedVolume, decimal tradePrice,
+        decimal signedVolume, decimal? tradePrice,
+        IndexPricingTerms? pricing = null,
         CancellationToken cancellationToken = default)
     {
         var counterparty = await counterpartyDirectory.FindAsync(counterpartyId, cancellationToken)
@@ -36,7 +37,7 @@ internal sealed class CreditReservationService(
                 .ToListAsync(cancellationToken);
 
             var existingExposure = await exposureCalculator.ForReservationsAsync(activeReservations, cancellationToken);
-            var newTradeExposure = await exposureCalculator.ForTradeAsync(commodityCode, deliveryPeriod, signedVolume, tradePrice, cancellationToken);
+            var newTradeExposure = await exposureCalculator.ForTradeAsync(commodityCode, deliveryPeriod, signedVolume, tradePrice, pricing, cancellationToken);
             var projectedExposure = existingExposure + newTradeExposure;
             var tenant = new TenantId(tenantId);
 
@@ -50,7 +51,7 @@ internal sealed class CreditReservationService(
 
             db.CreditReservations.Add(CreditReservation.Create(
                 tenant, counterpartyId, tradeId,
-                commodityCode, deliveryPeriod, signedVolume, tradePrice,
+                commodityCode, deliveryPeriod, signedVolume, tradePrice, pricing,
                 newTradeExposure, status));
             await db.SaveChangesAsync(cancellationToken);
 

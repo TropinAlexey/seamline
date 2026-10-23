@@ -74,6 +74,28 @@ public sealed class CurveImportTests(SeamlineApiFactory factory) : IClassFixture
         Assert.Contains(curvePoints, p => p.DeliveryPeriod == currentPeriod && p.CommodityCode == "POWER");
     }
 
+    [Fact]
+    public async Task Import_publishes_todays_synthetic_fixing_once_and_never_overwrites_it()
+    {
+        var tenantId = Guid.NewGuid();
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var provider = BuildCurveImportServiceProvider();
+        await provider.RunCurveImportAsync();
+        await provider.RunCurveImportAsync();
+
+        var fixings = (await client.GetFromJsonAsync<List<FixingDto>>($"/indices/COAL-IDX/fixings?from={today:yyyy-MM-dd}&to={today:yyyy-MM-dd}"))!;
+        if (!PricingCalendar.IsPricingDay(today))
+        {
+            Assert.Empty(fixings); // indices do not fix at weekends
+            return;
+        }
+        var fixing = Assert.Single(fixings); // the second run left the first one alone
+        Assert.Equal(new SyntheticCurveSource().DailyFixing("COAL", today), fixing.Value);
+        Assert.Equal("curve-import", fixing.PublishedBy);
+    }
+
     private IServiceProvider BuildCurveImportServiceProvider()
     {
         var configuration = new ConfigurationBuilder()
@@ -102,6 +124,8 @@ public sealed class CurveImportTests(SeamlineApiFactory factory) : IClassFixture
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<List<CurvePointDto>>())!;
     }
+
+    private sealed record FixingDto(DateOnly FixingDate, decimal Value, string PublishedBy);
 
     private sealed record CurvePointDto(string CommodityCode, string DeliveryPeriod, decimal Price, DateTimeOffset PublishedAt);
 }

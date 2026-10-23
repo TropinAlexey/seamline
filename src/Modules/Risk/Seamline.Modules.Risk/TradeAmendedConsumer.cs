@@ -22,11 +22,21 @@ internal sealed class TradeAmendedConsumer(RiskDbContext db, TenantContext tenan
         var oldSignedVolume = message.OldVolume * sign;
         var newSignedVolume = message.NewVolume * sign;
 
-        var position = await PositionLookup.FindOrCreateAsync(
-            db, new TenantId(message.TenantId), message.CommodityCode, message.DeliveryPeriod, context.CancellationToken);
+        var formulaTrade = await db.FormulaTrades.FirstOrDefaultAsync(f => f.TradeId == message.TradeId, context.CancellationToken);
+        if (formulaTrade is not null)
+        {
+            // Volume only: an index trade's pricing terms never change by
+            // amendment (ADR-0035), and it has no place in the position.
+            formulaTrade.Amend(newSignedVolume);
+        }
+        else
+        {
+            var position = await PositionLookup.FindOrCreateAsync(
+                db, new TenantId(message.TenantId), message.CommodityCode, message.DeliveryPeriod, context.CancellationToken);
 
-        position.Apply(-oldSignedVolume, message.OldPrice);
-        position.Apply(newSignedVolume, message.NewPrice);
+            position.Apply(-oldSignedVolume, message.OldPrice!.Value);
+            position.Apply(newSignedVolume, message.NewPrice!.Value);
+        }
 
         // The reservation follows the amendment, so exposure is measured on
         // the trade's current terms (ADR-0031).
@@ -34,7 +44,7 @@ internal sealed class TradeAmendedConsumer(RiskDbContext db, TenantContext tenan
         if (reservation is not null)
         {
             var exposure = await exposureCalculator.ForTradeAsync(
-                message.CommodityCode, message.DeliveryPeriod, newSignedVolume, message.NewPrice, context.CancellationToken);
+                message.CommodityCode, message.DeliveryPeriod, newSignedVolume, message.NewPrice, reservation.Pricing, context.CancellationToken);
             reservation.Amend(newSignedVolume, message.NewPrice, exposure);
         }
 

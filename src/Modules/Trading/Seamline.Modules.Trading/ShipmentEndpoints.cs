@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Seamline.Modules.Identity.Contracts;
+using Seamline.Modules.Risk.Contracts;
 using Seamline.SharedKernel;
 
 namespace Seamline.Modules.Trading.Internal;
@@ -85,19 +86,28 @@ internal static class ShipmentEndpoints
         // Active -> Delivered commit in one transaction and TradeDelivered
         // goes out through the same outbox (ADR-0037).
         group.MapPost("/{tradeId:guid}/load", async (
-            Guid tradeId, RecordLoadingRequest request, TradingDbContext db, IPublishEndpoint publisher, ClaimsPrincipal user, CancellationToken ct) =>
+            Guid tradeId, RecordLoadingRequest request, TradingDbContext db, IFormulaPricingService formulaPricing,
+            IPublishEndpoint publisher, ClaimsPrincipal user, CancellationToken ct) =>
         {
+            await using var transaction = await TradeRowLock.AcquireAsync(db, tradeId, ct);
             var (trade, shipment) = await LoadAsync(db, tradeId, ct);
             if (trade is null || shipment is null)
                 return Results.NotFound();
 
+            // An unfixed index trade is invoiced provisionally at today's
+            // expected price, which Risk computes (ADR-0035).
+            var expectedPrice = trade.Price is null
+                ? (await formulaPricing.PriceFormulaAsync(trade, ct))?.ExpectedPrice
+                : null;
+
             var actor = TradingEndpoints.ActorName(user);
             var shipmentHistory = shipment.RecordLoading(request.BlQuantity, request.BlDate, actor);
-            var (tradeHistory, delivered) = trade.DeliverLoaded(actor, request.BlQuantity, request.BlDate);
+            var (tradeHistory, delivered) = trade.DeliverLoaded(actor, request.BlQuantity, request.BlDate, expectedPrice);
             db.ShipmentHistory.Add(shipmentHistory);
             db.TradeHistory.Add(tradeHistory);
             await publisher.Publish(delivered, ct);
             await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
 
             return Results.Ok(ShipmentEntry.From(trade, shipment));
         })
@@ -110,15 +120,19 @@ internal static class ShipmentEndpoints
         group.MapPost("/{tradeId:guid}/certify", async (
             Guid tradeId, RecordCertificateRequest request, TradingDbContext db, IPublishEndpoint publisher, ClaimsPrincipal user, CancellationToken ct) =>
         {
+            // Serialized with the price fixing (TradeRowLock): whichever of the
+            // two commits second sees the first and carries both halves.
+            await using var transaction = await TradeRowLock.AcquireAsync(db, tradeId, ct);
             var (trade, shipment) = await LoadAsync(db, tradeId, ct);
             if (trade is null || shipment is null)
                 return Results.NotFound();
 
             var (history, outcome) = shipment.RecordCertificate(
-                trade.CargoTerms!, request.MeasuredNarKcalKg, request.SulphurPct, request.AshPct, TradingEndpoints.ActorName(user));
+                trade.CargoTerms!, request.MeasuredNarKcalKg, request.SulphurPct, request.AshPct, TradingEndpoints.ActorName(user), trade.Price);
             db.ShipmentHistory.Add(history);
             await publisher.Publish(outcome, outcome.GetType(), ct);
             await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
 
             return Results.Ok(ShipmentEntry.From(trade, shipment));
         })

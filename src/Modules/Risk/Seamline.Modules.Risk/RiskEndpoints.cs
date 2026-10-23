@@ -40,6 +40,41 @@ public static class RiskEndpoints
         .WithTags("Risk")
         .Produces<PositionsResponse>();
 
+        // Index-priced trades (ADR-0035), live: how much of each is still
+        // unfixed and what it is worth against today's forward. They are not
+        // in /positions, which holds fixed-price exposure only. Listed per
+        // trade, not summed per index and month: each trade has its own
+        // window, so a sum would hide which fixings move which trade.
+        app.MapGet("/pricing-exposure", async (RiskDbContext db, FormulaPricingService pricing, CancellationToken ct) =>
+        {
+            var trades = await db.FormulaTrades.AsNoTracking()
+                .Where(f => f.IsOpen)
+                .OrderBy(f => f.CommodityCode).ThenBy(f => f.DeliveryPeriod).ThenBy(f => f.TradeId)
+                .ToListAsync(ct);
+
+            var items = new List<PricingExposureEntry>(trades.Count);
+            foreach (var trade in trades)
+            {
+                var formula = await pricing.LoadAsync(trade.CommodityCode, trade.DeliveryPeriod, trade.Pricing, ct);
+                var expected = trade.MarkPrice(formula);
+                var fixedQuantity = formula.FixedQuantity(trade.SignedVolume);
+                decimal? mtm = formula.Forward is { } forward && expected is { } e
+                    ? MtmCalculator.Calculate(forward, e, trade.SignedVolume)
+                    : null;
+                items.Add(new PricingExposureEntry(
+                    trade.TradeId, trade.CommodityCode, trade.DeliveryPeriod, trade.Pricing.IndexCode,
+                    trade.SignedVolume, formula.PricingDays, formula.FixedDays, fixedQuantity, trade.SignedVolume - fixedQuantity,
+                    FormulaPrice.ToPriceScale(expected), formula.Forward, trade.FinalPrice, mtm));
+            }
+
+            return Results.Ok(new PricingExposureResponse(items, SumOrNull(items.Select(i => i.MtmAmount))));
+        })
+        .WithTags("Risk")
+        // Price risk is the desk's and risk's view, like counterparty
+        // exposure; back office settles, it does not manage price risk.
+        .RequireAuthorization(policy => policy.RequireRole(IdentityRoles.MiddleOffice, IdentityRoles.FrontOffice))
+        .Produces<PricingExposureResponse>();
+
         app.MapGet("/valuations/latest", async (RiskDbContext db, CancellationToken ct) =>
         {
             // Every row of a run shares RunId and ValuedAt (EodRun), so the
@@ -53,10 +88,10 @@ public static class RiskEndpoints
 
             var items = await db.ValuationSnapshots.AsNoTracking()
                 .Where(v => v.RunId == latest.RunId)
-                .OrderBy(v => v.CommodityCode).ThenBy(v => v.DeliveryPeriod)
+                .OrderBy(v => v.CommodityCode).ThenBy(v => v.DeliveryPeriod).ThenBy(v => v.TradeId)
                 .Select(v => new ValuationEntry(
                     v.CommodityCode, v.DeliveryPeriod, v.NetVolume, v.WeightedAvgPrice,
-                    v.CurvePrice, v.CurvePublishedAt, v.MtmAmount))
+                    v.CurvePrice, v.CurvePublishedAt, v.MtmAmount, v.TradeId))
                 .ToListAsync(ct);
 
             return Results.Ok(new ValuationRunResponse(latest.RunId, latest.ValuedAt, items, items.Sum(i => i.MtmAmount)));
@@ -83,7 +118,7 @@ public static class RiskEndpoints
             var rows = await db.StressScenarioResults.AsNoTracking()
                 .Where(s => s.RunId == runId)
                 .OrderBy(s => s.ScenarioType).ThenByDescending(s => s.ShockPercentage)
-                .ThenBy(s => s.CommodityCode).ThenBy(s => s.DeliveryPeriod)
+                .ThenBy(s => s.CommodityCode).ThenBy(s => s.DeliveryPeriod).ThenBy(s => s.TradeId)
                 .ToListAsync(ct);
 
             var scenarios = rows
@@ -91,7 +126,7 @@ public static class RiskEndpoints
                 .Select(g => new StressScenarioGroup(
                     g.Key.ScenarioType,
                     g.Key.ShockPercentage,
-                    g.Select(s => new StressEntry(s.CommodityCode, s.DeliveryPeriod, s.NetVolume, s.ShockedPrice, s.MtmAmount)).ToList(),
+                    g.Select(s => new StressEntry(s.CommodityCode, s.DeliveryPeriod, s.NetVolume, s.ShockedPrice, s.MtmAmount, s.TradeId)).ToList(),
                     g.Sum(s => s.MtmAmount)))
                 .ToList();
 
@@ -136,6 +171,25 @@ public static class RiskEndpoints
 
 internal sealed record PositionsResponse(IReadOnlyList<PositionRef> Items, decimal? TotalMtm);
 
+// Quantities are signed like the position's NetVolume (Sell is negative).
+internal sealed record PricingExposureEntry(
+    Guid TradeId,
+    string CommodityCode,
+    string DeliveryPeriod,
+    string IndexCode,
+    decimal Volume,
+    int PricingDays,
+    int FixedDays,
+    decimal FixedQuantity,
+    decimal UnfixedQuantity,
+    decimal? ExpectedPrice,
+    decimal? Forward,
+    decimal? FinalPrice,
+    decimal? MtmAmount);
+
+internal sealed record PricingExposureResponse(IReadOnlyList<PricingExposureEntry> Items, decimal? TotalMtm);
+
+// TradeId as on StressEntry.
 internal sealed record ValuationEntry(
     string CommodityCode,
     string DeliveryPeriod,
@@ -143,11 +197,14 @@ internal sealed record ValuationEntry(
     decimal WeightedAvgPrice,
     decimal CurvePrice,
     DateTimeOffset CurvePublishedAt,
-    decimal MtmAmount);
+    decimal MtmAmount,
+    Guid? TradeId);
 
 internal sealed record ValuationRunResponse(Guid? RunId, DateTimeOffset? RunAt, IReadOnlyList<ValuationEntry> Items, decimal TotalMtm);
 
-internal sealed record StressEntry(string CommodityCode, string DeliveryPeriod, decimal NetVolume, decimal ShockedPrice, decimal MtmAmount);
+// TradeId is set on an index-priced trade's row (valued per trade,
+// ADR-0035) and null on a position's row.
+internal sealed record StressEntry(string CommodityCode, string DeliveryPeriod, decimal NetVolume, decimal ShockedPrice, decimal MtmAmount, Guid? TradeId);
 
 internal sealed record StressScenarioGroup(
     ScenarioType ScenarioType,

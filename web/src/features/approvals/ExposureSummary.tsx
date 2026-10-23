@@ -10,7 +10,7 @@ export function ExposureSummary({
   notional,
 }: {
   counterpartyId: string;
-  notional: number;
+  notional: number | null;
 }) {
   const exposure = useExposure(counterpartyId);
   return (
@@ -22,7 +22,8 @@ export function ExposureSummary({
         </Text>
       )}
       <Text size="xs" c="dimmed">
-        This trade&apos;s notional {formatAmount(notional)}
+        This trade&apos;s notional{" "}
+        {notional === null ? "— (index-priced, not fixed yet)" : formatAmount(notional)}
       </Text>
     </Stack>
   );

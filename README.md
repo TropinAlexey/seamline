@@ -3,8 +3,8 @@
 # Seamline
 _mini SaaS CTRM demo project_
 
-[![CI](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml)
-[![Deploy](https://github.com/TropinAlexey/seamline/actions/workflows/deploy.yml/badge.svg)](https://github.com/TropinAlexey/seamline/actions/workflows/deploy.yml)
+[![CI](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/TropinAlexey/seamline/actions/workflows/ci.yml)
+[![Deploy](https://github.com/TropinAlexey/seamline/actions/workflows/deploy.yml/badge.svg?branch=main&event=push)](https://github.com/TropinAlexey/seamline/actions/workflows/deploy.yml)
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17.5-336791?logo=postgresql&logoColor=white)
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-FF6600?logo=rabbitmq&logoColor=white)

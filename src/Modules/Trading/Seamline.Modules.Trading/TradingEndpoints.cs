@@ -186,6 +186,9 @@ public static class TradingEndpoints
                 if (notional is null)
                     return Results.BadRequest(new ErrorResponse(
                         $"No forward curve point for {trade.CommodityCode} {trade.DeliveryPeriod} and no fixing yet: an index-priced trade cannot be credit-checked."));
+                if (notional <= 0)
+                    return Results.BadRequest(new ErrorResponse(
+                        $"The expected price of {trade.Id} is {priced.ExpectedPrice:0.0000}, not positive: the premium is deeper than the index."));
             }
 
             var actor = ActorName(user);

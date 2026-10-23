@@ -111,6 +111,17 @@ public class IndexPricedTradeTests
     }
 
     [Fact]
+    public void A_premium_deeper_than_the_index_cannot_be_invoiced()
+    {
+        var trade = Active();
+
+        Assert.Throws<DomainRuleViolationException>(() =>
+            trade.DeliverLoaded("ops", 78_500m, new DateOnly(2027, 3, 14), expectedPrice: -0.5m));
+        Assert.Throws<DomainRuleViolationException>(() => trade.FixPrice("ops", 0m, 1.5m));
+        Assert.Equal(TradeState.Active, trade.State);
+    }
+
+    [Fact]
     public void A_certificate_before_the_price_is_fixed_marks_the_final_invoice_as_pending()
     {
         var trade = Active();

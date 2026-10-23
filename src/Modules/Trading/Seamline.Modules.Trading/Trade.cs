@@ -253,6 +253,11 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
 
         var invoicePrice = Price ?? expectedPrice
             ?? throw new DomainRuleViolationException($"Trade {Id} has no price yet: an expected price is needed to invoice it provisionally.");
+        // A premium may be negative (spec 03); one deeper than the index
+        // would put a zero or negative unit price on the invoice.
+        if (invoicePrice <= 0)
+            throw new DomainRuleViolationException(
+                $"Trade {Id}: the price to invoice at is {invoicePrice:0.0000}, not positive; check the premium.");
 
         ActualVolume = blQuantity;
         State = TradeState.Delivered;

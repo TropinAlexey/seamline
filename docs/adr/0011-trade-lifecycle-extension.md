@@ -1,6 +1,7 @@
 # ADR-0011: Trade Lifecycle Extension — Cancelled, Amended, Delivered
 
 **Status:** Accepted
+**Amended in part by:** [ADR-0034](0034-coal-cargo-logistics.md) (delivery of cargo commodities), [ADR-0035](0035-formula-pricing.md) (index-priced trades)
 **Date:** 2026-07
 
 ## Context

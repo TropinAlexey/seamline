@@ -1,6 +1,7 @@
 # ADR-0018: Curve Import
 
 **Status:** Accepted
+**Amended in part by:** [ADR-0033](0033-commodity-master-data.md) (commodities from master data), [ADR-0035](0035-formula-pricing.md) (append-only index fixings)
 **Date:** 2026-07
 
 ## Context

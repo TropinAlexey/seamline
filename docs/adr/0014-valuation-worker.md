@@ -1,6 +1,7 @@
 # ADR-0014: Valuation.Worker — Real Mark-to-Market
 
 **Status:** Accepted
+**Amended in part by:** [ADR-0034](0034-coal-cargo-logistics.md) (close-out on contract quantity), [ADR-0035](0035-formula-pricing.md) (formula trades valued per trade), [ADR-0036](0036-gas-storage-inventory.md) (weighted-average rule moved to SharedKernel)
 **Date:** 2026-07
 
 ## Context

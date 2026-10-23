@@ -1,6 +1,7 @@
 # ADR-0012: First Entities for MarketData and Settlement
 
 **Status:** Accepted
+**Amended in part by:** [ADR-0034](0034-coal-cargo-logistics.md) (invoice lifecycle), [ADR-0035](0035-formula-pricing.md) (append-only index fixings)
 **Date:** 2026-07
 
 ## Context

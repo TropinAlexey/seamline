@@ -40,6 +40,19 @@ internal static class AuthTestHelper
             insert.Parameters.AddWithValue("passwordHash", passwordHash);
             insert.Parameters.AddWithValue("role", role);
             await insert.ExecuteNonQueryAsync();
+
+            // Each test runs in its own random tenant, so it gets the same
+            // flow commodities the AddCommodity migration seeds for the demo
+            // tenants (ADR-0033) — otherwise every POST /trades would be 400.
+            await using var commodities = connection.CreateCommand();
+            commodities.CommandText = """
+                INSERT INTO reference.commodity ("Id", tenant_id, code, name, unit, delivery_model)
+                VALUES (gen_random_uuid(), @tenantId, 'POWER', 'Power', 1, 1),
+                       (gen_random_uuid(), @tenantId, 'GAS', 'Natural gas', 1, 1)
+                ON CONFLICT (tenant_id, code) DO NOTHING;
+                """;
+            commodities.Parameters.AddWithValue("tenantId", tenantId);
+            await commodities.ExecuteNonQueryAsync();
         }
 
         var loginResponse = await client.PostAsJsonAsync("/auth/login", new { tenantId, login, password = Password });

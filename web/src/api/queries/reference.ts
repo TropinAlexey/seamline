@@ -32,3 +32,28 @@ export function useCreateCounterparty() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: counterpartyKeys.all }),
   });
 }
+
+export type CommodityRef = Schemas["CommodityRef"];
+export type UnitOfMeasure = Schemas["UnitOfMeasure"];
+
+// Commodity master data changes rarely (ADR-0033): one fetch per session
+// is enough for the trade form and unit labels.
+export function useCommodities() {
+  return useQuery({
+    queryKey: ["commodities"],
+    queryFn: () => unwrap(api.GET("/commodities")),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export const unitLabels: Record<UnitOfMeasure, string> = { MWh: "MWh", Tonne: "t" };
+
+// Unit label for a commodity code, or null while loading or for an unknown
+// code — callers then show the bare number.
+export function useUnitOf(): (code: string) => string | null {
+  const { data } = useCommodities();
+  return useMemo(() => {
+    const units = new Map((data ?? []).map((c) => [c.code, unitLabels[c.unit]]));
+    return (code: string) => units.get(code) ?? null;
+  }, [data]);
+}

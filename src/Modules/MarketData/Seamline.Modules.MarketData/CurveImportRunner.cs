@@ -16,17 +16,18 @@ namespace Seamline.Modules.MarketData.Internal;
 // already has at least one PriceCurvePoint row for that commodity — import
 // keeps an existing relationship fresh, it doesn't invent a brand-new
 // tenant/commodity pairing out of nothing. A tenant that has never
-// published POWER or GAS (manually, via POST /curve-points) is left alone.
+// published a commodity (manually, via POST /curve-points) is left alone.
+// The commodity list comes from the same table rather than a hard-coded
+// POWER/GAS pair (ADR-0033), so a new commodity is imported as soon as some
+// tenant publishes a first point for it.
 internal sealed class CurveImportRunner(IServiceProvider services, ILogger<CurveImportRunner> logger)
 {
-    private static readonly string[] Commodities = ["POWER", "GAS"];
-
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         var month = DateOnly.FromDateTime(DateTimeOffset.UtcNow.Date);
         var deliveryPeriod = $"{month:yyyy-MM}";
 
-        foreach (var commodityCode in Commodities)
+        foreach (var commodityCode in await DiscoverCommodityCodesAsync(cancellationToken))
         {
             var tenantIds = await DiscoverTenantIdsWithExistingCurvePointAsync(commodityCode, cancellationToken);
             if (tenantIds.Count == 0)
@@ -98,15 +99,30 @@ internal sealed class CurveImportRunner(IServiceProvider services, ILogger<Curve
     // both active.
     private async Task<List<Guid>> DiscoverTenantIdsWithExistingCurvePointAsync(string commodityCode, CancellationToken cancellationToken)
     {
-        var configuration = services.GetRequiredService<IConfiguration>();
-        var optionsBuilder = new DbContextOptionsBuilder<MarketDataDbContext>()
-            .UseNpgsql(configuration.GetConnectionString("PostgresMigrator"));
-
-        await using var db = new MarketDataDbContext(optionsBuilder.Options, new TenantContext());
+        await using var db = CreateOwnerContext();
         return await db.PriceCurvePoints.IgnoreQueryFilters()
             .Where(p => p.CommodityCode == commodityCode)
             .Select(p => p.TenantId.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
+    }
+
+    // Same owner-connection read as the tenant discovery above.
+    private async Task<List<string>> DiscoverCommodityCodesAsync(CancellationToken cancellationToken)
+    {
+        await using var db = CreateOwnerContext();
+        return await db.PriceCurvePoints.IgnoreQueryFilters()
+            .Select(p => p.CommodityCode)
+            .Distinct()
+            .OrderBy(code => code)
+            .ToListAsync(cancellationToken);
+    }
+
+    private MarketDataDbContext CreateOwnerContext()
+    {
+        var configuration = services.GetRequiredService<IConfiguration>();
+        var optionsBuilder = new DbContextOptionsBuilder<MarketDataDbContext>()
+            .UseNpgsql(configuration.GetConnectionString("PostgresMigrator"));
+        return new MarketDataDbContext(optionsBuilder.Options, new TenantContext());
     }
 }

@@ -2,7 +2,7 @@ import { Table, Text } from "@mantine/core";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import type { TradeSummary } from "../../api/queries/trading";
-import { useCounterpartyNames } from "../../api/queries/reference";
+import { useCounterpartyNames, useUnitOf } from "../../api/queries/reference";
 import { StateBadge } from "../../components/StateBadge";
 import { formatDateTime, shortId } from "../../format/date";
 import { formatAmount, formatPrice, formatVolume } from "../../format/money";
@@ -16,6 +16,7 @@ interface Props {
 export function TradeTable({ trades, extraHeader, renderExtra }: Props) {
   const navigate = useNavigate();
   const counterpartyName = useCounterpartyNames();
+  const unitOf = useUnitOf();
 
   if (trades.length === 0) {
     return (
@@ -61,7 +62,9 @@ export function TradeTable({ trades, extraHeader, renderExtra }: Props) {
                 <Table.Td>{trade.commodityCode}</Table.Td>
                 <Table.Td>{trade.deliveryPeriod}</Table.Td>
                 <Table.Td>{trade.direction}</Table.Td>
-                <Table.Td ta="right">{formatVolume(trade.volume)}</Table.Td>
+                <Table.Td ta="right">
+                  {formatVolume(trade.volume)} {unitOf(trade.commodityCode)}
+                </Table.Td>
                 <Table.Td ta="right">{formatPrice(trade.price)}</Table.Td>
                 <Table.Td ta="right">{formatAmount(trade.notional)}</Table.Td>
                 <Table.Td>{counterpartyName(trade.counterpartyId)}</Table.Td>

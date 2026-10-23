@@ -16,7 +16,8 @@ test("1. FO creates and submits a trade within the limit → Active", async ({ p
   await page.getByRole("button", { name: "New trade" }).click();
 
   const dialog = page.getByRole("dialog", { name: "New trade" });
-  await dialog.getByLabel("Commodity").fill("POWER");
+  await dialog.getByLabel("Commodity").click();
+  await page.getByRole("option", { name: "POWER — Power" }).click();
   await dialog.getByLabel("Delivery period").fill("2027-02");
   await dialog.getByLabel("Volume (MWh)").fill("100");
   await dialog.getByLabel("Price").fill("85.5");

@@ -69,12 +69,27 @@ README.
 ## Scope boundaries
 
 - Physical forwards only, power and gas. No options.
+- Commodities are tenant-owned master data in Reference (unit, delivery
+  model, quality spec — `docs/adr/0033-commodity-master-data.md`). Never
+  hard-code a commodity list; one currency, EUR.
 - Monthly delivery periods only.
 - Mark-to-market: `(forward_price - trade_price) * volume`. No curve
   interpolation, shaping, or cascading — flat monthly points.
 - No VaR. Stress scenarios instead.
 - REMIT reporting is simplified XML + acer-stub; not a compliant
   implementation. State this in README.
+
+These boundaries describe what is implemented. The CTRM extension (coal
+cargo, formula pricing, gas storage) is specified in
+`docs/adr/0032-ctrm-scope.md` and `docs/specs/`; a boundary line here
+changes only when the step that needs it is implemented, and README must
+not claim a specified process as implemented (`docs/ctrm-gap-analysis.md`,
+"Wording rules").
+
+Work within the existing ADRs. When a change genuinely has to break one,
+write a new ADR that links it, says what is amended and why, and add a
+one-line "Amended in part by" back-link to the old ADR — never rewrite or
+silently contradict an accepted decision.
 
 ## Money and volumes
 

@@ -289,6 +289,137 @@
         }
       }
     },
+    "/commodities": {
+      "get": {
+        "tags": [
+          "Reference"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CommodityRef"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Reference"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommodityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommodityRef"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commodities/{code}/quality-spec": {
+      "put": {
+        "tags": [
+          "Reference"
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QualitySpecRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommodityRef"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/trades": {
       "post": {
         "tags": [
@@ -889,6 +1020,40 @@
           }
         }
       },
+      "CommodityRef": {
+        "required": [
+          "code",
+          "name",
+          "unit",
+          "deliveryModel",
+          "qualitySpec"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitOfMeasure"
+          },
+          "deliveryModel": {
+            "$ref": "#/components/schemas/DeliveryModel"
+          },
+          "qualitySpec": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QualitySpecRef"
+              }
+            ]
+          }
+        }
+      },
       "CounterpartyExposure": {
         "required": [
           "counterpartyId",
@@ -929,6 +1094,40 @@
           "creditLimit": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "CreateCommodityRequest": {
+        "required": [
+          "code",
+          "name",
+          "unit",
+          "deliveryModel",
+          "qualitySpec"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitOfMeasure"
+          },
+          "deliveryModel": {
+            "$ref": "#/components/schemas/DeliveryModel"
+          },
+          "qualitySpec": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QualitySpecRef"
+              }
+            ]
           }
         }
       },
@@ -1012,6 +1211,12 @@
             "format": "date-time"
           }
         }
+      },
+      "DeliveryModel": {
+        "enum": [
+          "Flow",
+          "Cargo"
+        ]
       },
       "ErrorResponse": {
         "required": [
@@ -1141,6 +1346,33 @@
               "null",
               "number"
             ],
+            "format": "double"
+          }
+        }
+      },
+      "QualitySpecRef": {
+        "required": [
+          "baseNarKcalKg",
+          "rejectBelowNarKcalKg",
+          "maxSulphurPct",
+          "maxAshPct"
+        ],
+        "type": "object",
+        "properties": {
+          "baseNarKcalKg": {
+            "type": "number",
+            "format": "double"
+          },
+          "rejectBelowNarKcalKg": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxSulphurPct": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxAshPct": {
+            "type": "number",
             "format": "double"
           }
         }
@@ -1524,6 +1756,12 @@
             "format": "date-time"
           }
         }
+      },
+      "UnitOfMeasure": {
+        "enum": [
+          "MWh",
+          "Tonne"
+        ]
       },
       "ValuationEntry": {
         "required": [

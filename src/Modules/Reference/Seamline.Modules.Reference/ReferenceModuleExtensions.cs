@@ -16,6 +16,7 @@ public static class ReferenceModuleExtensions
                 .AddInterceptors(sp.GetRequiredService<TenantSessionVariableInterceptor>()));
 
         services.AddScoped<ICounterpartyDirectory, CounterpartyDirectory>();
+        services.AddScoped<ICommodityDirectory, CommodityDirectory>();
 
         return services;
     }

@@ -19,6 +19,7 @@ export const navItems: readonly NavItem[] = [
   { to: "/stress", label: "Stress", roles: ["MO", "BO"] },
   { to: "/curves", label: "Market data", roles: ["FO", "MO", "BO"] },
   { to: "/counterparties", label: "Counterparties", roles: ["FO", "MO", "BO"] },
+  { to: "/commodities", label: "Commodities", roles: ["FO", "MO", "BO"] },
   { to: "/invoices", label: "Invoices", roles: ["BO"] },
   { to: "/audit", label: "Audit trail", roles: ["MO", "BO"] },
 ];

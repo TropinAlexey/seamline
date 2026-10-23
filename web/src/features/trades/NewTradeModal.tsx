@@ -1,7 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Alert,
-  Autocomplete,
   Button,
   Group,
   Modal,
@@ -12,11 +11,10 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { useNavigate } from "react-router";
 import { z } from "zod";
-import { useCurvePoints } from "../../api/queries/marketData";
-import { useCounterparties } from "../../api/queries/reference";
+import { useCommodities, useCounterparties, useUnitOf } from "../../api/queries/reference";
 import { runTradeAction, useCreateTrade, type TradeSummary } from "../../api/queries/trading";
 import { errorMessage, notifySuccess } from "../../components/notify";
 
@@ -42,7 +40,8 @@ function submitOutcomeMessage(state: TradeSummary["state"]): string {
 export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const createTrade = useCreateTrade();
-  const { data: curvePoints } = useCurvePoints();
+  const { data: commodities } = useCommodities();
+  const unitOf = useUnitOf();
   const { data: counterparties } = useCounterparties();
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -51,7 +50,8 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
     defaultValues: { commodityCode: "", deliveryPeriod: "", direction: "Buy", counterpartyId: "" },
   });
 
-  const commodities = [...new Set((curvePoints ?? []).map((p) => p.commodityCode))];
+  // Volume and price are in the selected commodity's unit (ADR-0033).
+  const unit = unitOf(useWatch({ control, name: "commodityCode" })) ?? "unit";
 
   const submit = (andSubmit: boolean) =>
     handleSubmit(async (values) => {
@@ -83,12 +83,15 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
             control={control}
             name="commodityCode"
             render={({ field, fieldState }) => (
-              <Autocomplete
+              <Select
                 label="Commodity"
-                description="Pick from the curve or type a new code"
-                data={commodities}
-                value={field.value}
-                onChange={field.onChange}
+                data={(commodities ?? []).map((c) => ({
+                  value: c.code,
+                  label: `${c.code} — ${c.name}`,
+                }))}
+                value={field.value || null}
+                onChange={(v) => field.onChange(v ?? "")}
+                searchable
                 error={fieldState.error?.message}
               />
             )}
@@ -117,7 +120,7 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
               name="volume"
               render={({ field, fieldState }) => (
                 <NumberInput
-                  label="Volume (MWh)"
+                  label={`Volume (${unit})`}
                   value={field.value ?? ""}
                   onChange={(v) => field.onChange(typeof v === "number" ? v : undefined)}
                   decimalScale={3}
@@ -130,7 +133,7 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
               name="price"
               render={({ field, fieldState }) => (
                 <NumberInput
-                  label="Price"
+                  label={`Price (EUR/${unit})`}
                   value={field.value ?? ""}
                   onChange={(v) => field.onChange(typeof v === "number" ? v : undefined)}
                   decimalScale={4}

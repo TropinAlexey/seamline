@@ -51,3 +51,11 @@ test("A deep link survives a full page reload", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("heading", { name: "Counterparties" })).toBeVisible();
 });
+
+test("Commodity master data labels volumes with their unit", async ({ page }) => {
+  await loginAs(page, "A", "trader");
+  await page.goto("/commodities");
+  const rows = page.getByTestId("commodity-row");
+  await expect(rows.filter({ hasText: "POWER" })).toContainText("MWh");
+  await expect(rows.filter({ hasText: "GAS" })).toContainText("Flow");
+});

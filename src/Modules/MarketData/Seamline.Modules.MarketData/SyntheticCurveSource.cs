@@ -8,13 +8,15 @@ namespace Seamline.Modules.MarketData.Internal;
 // the way a real curve would.
 internal sealed class SyntheticCurveSource : ICurveSource
 {
-    // Plausible order-of-magnitude anchors, EUR/MWh-ish — a demo
+    // Plausible order-of-magnitude anchors, EUR per commodity unit (MWh, or
+    // tonne for COAL — ADR-0033) — a demo
     // placeholder, not derived from any real vendor's pricing (CLAUDE.md's
     // clean-room rule).
     private static readonly Dictionary<string, decimal> BasePrices = new()
     {
         ["POWER"] = 65m,
-        ["GAS"] = 30m
+        ["GAS"] = 30m,
+        ["COAL"] = 110m
     };
 
     public Task<decimal?> GetMonthlyAveragePriceAsync(string commodityCode, DateOnly month, CancellationToken cancellationToken = default)

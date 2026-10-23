@@ -15,7 +15,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
-import { useCounterpartyNames } from "../../api/queries/reference";
+import { useCounterpartyNames, useUnitOf } from "../../api/queries/reference";
 import {
   runTradeAction,
   tradeKeys,
@@ -80,6 +80,7 @@ export function TradeDetailPage() {
   const session = useSession();
   const queryClient = useQueryClient();
   const counterpartyName = useCounterpartyNames();
+  const unitOf = useUnitOf();
   const [amendOpen, setAmendOpen] = useState(false);
   const [busy, setBusy] = useState<UiTradeAction | null>(null);
 
@@ -143,7 +144,9 @@ export function TradeDetailPage() {
                   {trade.data.id}
                 </Text>
               </Field>
-              <Field label="Volume">{formatVolume(trade.data.volume)}</Field>
+              <Field label="Volume">
+                {formatVolume(trade.data.volume)} {unitOf(trade.data.commodityCode)}
+              </Field>
               <Field label="Price">{formatPrice(trade.data.price)}</Field>
               <Field label="Notional">{formatAmount(trade.data.notional)}</Field>
               <Field label="Counterparty">{counterpartyName(trade.data.counterpartyId)}</Field>

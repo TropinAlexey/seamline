@@ -5,6 +5,7 @@ import { homeFor } from "./auth/roles";
 import { AppLayout } from "./components/AppLayout";
 import { ApprovalsPage } from "./features/approvals/ApprovalsPage";
 import { AuditPage } from "./features/audit/AuditPage";
+import { CommoditiesPage } from "./features/commodities/CommoditiesPage";
 import { CounterpartiesPage } from "./features/counterparties/CounterpartiesPage";
 import { CurvesPage } from "./features/curves/CurvesPage";
 import { InvoicesPage } from "./features/invoices/InvoicesPage";
@@ -34,6 +35,7 @@ export function AppRoutes() {
         <Route path="/trades" element={<TradesPage />} />
         <Route path="/trades/:id" element={<TradeDetailPage />} />
         <Route path="/counterparties" element={<CounterpartiesPage />} />
+        <Route path="/commodities" element={<CommoditiesPage />} />
         <Route path="/positions" element={<PositionsPage />} />
         <Route path="/curves" element={<CurvesPage />} />
         <Route

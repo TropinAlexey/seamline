@@ -23,6 +23,44 @@ namespace Seamline.Modules.Reference.Internal.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Seamline.Modules.Reference.Internal.Commodity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("code");
+
+                    b.Property<int>("DeliveryModel")
+                        .HasColumnType("integer")
+                        .HasColumnName("delivery_model");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("Unit")
+                        .HasColumnType("integer")
+                        .HasColumnName("unit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("commodity", "reference");
+                });
+
             modelBuilder.Entity("Seamline.Modules.Reference.Internal.Counterparty", b =>
                 {
                     b.Property<Guid>("Id")
@@ -47,6 +85,44 @@ namespace Seamline.Modules.Reference.Internal.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("counterparty", "reference");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.Reference.Internal.Commodity", b =>
+                {
+                    b.OwnsOne("Seamline.Modules.Reference.Internal.QualitySpec", "QualitySpec", b1 =>
+                        {
+                            b1.Property<Guid>("CommodityId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<decimal>("BaseNarKcalKg")
+                                .HasPrecision(7, 1)
+                                .HasColumnType("numeric(7,1)")
+                                .HasColumnName("base_nar_kcal_kg");
+
+                            b1.Property<decimal>("MaxAshPct")
+                                .HasPrecision(5, 2)
+                                .HasColumnType("numeric(5,2)")
+                                .HasColumnName("max_ash_pct");
+
+                            b1.Property<decimal>("MaxSulphurPct")
+                                .HasPrecision(5, 2)
+                                .HasColumnType("numeric(5,2)")
+                                .HasColumnName("max_sulphur_pct");
+
+                            b1.Property<decimal>("RejectBelowNarKcalKg")
+                                .HasPrecision(7, 1)
+                                .HasColumnType("numeric(7,1)")
+                                .HasColumnName("reject_below_nar_kcal_kg");
+
+                            b1.HasKey("CommodityId");
+
+                            b1.ToTable("commodity", "reference");
+
+                            b1.WithOwner()
+                                .HasForeignKey("CommodityId");
+                        });
+
+                    b.Navigation("QualitySpec");
                 });
 #pragma warning restore 612, 618
         }

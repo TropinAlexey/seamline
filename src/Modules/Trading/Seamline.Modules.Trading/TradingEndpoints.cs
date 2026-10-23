@@ -27,10 +27,16 @@ public static class TradingEndpoints
             TradingDbContext db,
             ITenantContext tenant,
             ICounterpartyDirectory counterparties,
+            ICommodityDirectory commodities,
             IPublishEndpoint publisher,
             ClaimsPrincipal user,
             CancellationToken ct) =>
         {
+            // Commodity codes are master data (ADR-0033): a typo would
+            // otherwise open a position nothing can ever price.
+            if (await commodities.FindAsync(request.CommodityCode, ct) is null)
+                return Results.BadRequest(new ErrorResponse($"Commodity {request.CommodityCode} not found."));
+
             // Checked here, not left to the credit check at submit time: a
             // draft pointing at a counterparty that doesn't exist would
             // otherwise be accepted and then fail every submit.

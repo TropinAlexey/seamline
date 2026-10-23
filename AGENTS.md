@@ -9,17 +9,22 @@ Multi-tenant mini-CTRM (power/gas forwards) на .NET 10 — модульный 
 (Valuation, Reporting). Postgres (схема на модуль + RLS), MassTransit 8.5.10
 (InMemory локально/тесты, RabbitMQ dev, ServiceBus в Azure), Hangfire для EOD.
 Тонкий web UI (React 19 + Mantine, `web/`) за same-origin прокси `/api`.
+Честно: сейчас это ETRM-ядро; CTRM-процессы (уголь-карго, формульная цена,
+хранилище газа) специфицированы, но не реализованы — `docs/ctrm-gap-analysis.md`.
 4 таргета деплоя: docker compose, k3d+Helm, AWS ECS (Terraform), Azure CA (Bicep).
 
-## Текущий статус (2026-10-23, ветка `main`, дерево чистое)
+## Текущий статус (2026-10-23, ветка `main`)
 - **Фазы 1–5 завершены, Фаза 6 (Web UI) — Phase A и B закоммичены.** Phase C
   (SignalR) и D (облачный деплой web) — вне скоупа, пока не попросят.
-- Тесты: 243 .NET (110 unit + 69 arch + 64 integration) + web 28 unit (Vitest)
-  + 10 E2E (Playwright против compose). 31 ADR.
+- **Фаза 7 (CTRM):** ADR-0032…0036, `docs/specs/00–03`, gap analysis. Шаг 1
+  (commodity master data, ADR-0033) реализован; шаги 2–4 специфицированы.
+  36 ADR.
+- Тесты: 254 .NET (110 unit + 69 arch + 75 integration) + web 28 unit (Vitest)
+  + 11 E2E (Playwright против compose).
 - CI — 4 job-ы, все зелёные: `build-and-test`, `api-contract` (OpenAPI не
   устарел), `web` (lint/format/typecheck/unit/build, TS-клиент == OpenAPI),
   `e2e` (compose с нуля + seed + Playwright, только push в main).
-- Последний коммит — фикс гонки миграций при старте (`fd1160e`).
+- Последний коммит — Фаза 7, шаг 1 (commodity master data).
 
 ## Что сделано последним (хронология)
 1. `d37719a` — бэкенд под UI: read-эндпоинты (blotter, history, exposure,
@@ -33,20 +38,34 @@ Multi-tenant mini-CTRM (power/gas forwards) на .NET 10 — модульный 
 4. `fd1160e` — `MigrationLock.MigrateWithLockAsync` (SharedKernel,
    `pg_advisory_lock`): API и воркеры гонялись за миграциями на пустой БД.
    Всплыло на первом прогоне `e2e` в CI.
-5. `35a0cea`, этот файл — бейджи README на push в main, AGENTS.md в репо.
+5. `35a0cea`, `a3e4c9d`, `c56d3e7`, `3444a7f` — бейджи README, AGENTS.md,
+   rate limiting в Security, скриншот trade detail с REMIT.
+6. Документы Фазы 7: gap analysis, спеки 00–03, ADR-0032…0036, обратные
+   ссылки «Amended in part by» в ADR-0011/0012/0014/0018.
+7. Фаза 7, шаг 1: `Commodity` в Reference (миграция `AddCommodity`, сид
+   POWER/GAS для демо-тенантов, RLS), `/commodities`, 400 на неизвестный
+   товар в `POST /trades`, CurveImportRunner без хардкода, UI: выбор товара
+   из справочника, единицы в blotter/detail, страница Commodities.
 
 ## Что дальше (приоритет сверху вниз)
-1. [ ] Утренняя проверка: `dotnet build SeamlineCtrm.sln && dotnet test SeamlineCtrm.sln`,
+1. [ ] Фаза 7, шаг 2: уголь-карго (spec 01, ADR-0034) — модуль Logistics,
+       сид COAL, актуализация, provisional/final invoice.
+       Затем формульная цена (03) → хранилище (02).
+       После каждого шага — перенести строку в README из «specified» в
+       «implemented», обновить gap analysis и CLAUDE.md Scope boundaries.
+2. [ ] Утренняя проверка: `dotnet build SeamlineCtrm.sln && dotnet test SeamlineCtrm.sln`,
        `gh run list --limit 3` — последний push зелёный.
-2. [ ] Осознанно оставлено: amend-consumer двигает резервацию без advisory lock
+3. [ ] Осознанно оставлено: amend-consumer двигает резервацию без advisory lock
        (amend не проходит кредитную проверку by design).
-3. [ ] k3d: ingress отвечает connection reset после `cluster stop/start` —
+4. [ ] k3d: ingress отвечает connection reset после `cluster stop/start` —
        обход `kubectl port-forward`, причина не разобрана.
-4. [ ] Опционально (бэклог): TLS на ALB/App Gateway, Argon2id вместо PBKDF2,
+5. [ ] Опционально (бэклог): TLS на ALB/App Gateway, Argon2id вместо PBKDF2,
        HPA/NetworkPolicy для k8s, rate limit по аккаунту, а не только по IP
        (README «Known limitations» + «Security considerations»).
-5. [ ] Любое архитектурное решение → новый ADR в `docs/adr/`
-       (Context/Decision/Consequences), обновить счётчик в README.
+6. [ ] Любое архитектурное решение → новый ADR в `docs/adr/`
+       (Context/Decision/Consequences), обновить счётчик в README. Нарушение
+       старого ADR — только через новый ADR со ссылкой и «почему» + строка
+       «Amended in part by» в старом.
 
 ## Быстрый старт утром
 ```bash
@@ -60,7 +79,7 @@ cd web && npm run e2e                                   # Playwright проти�
 
 ## Где что лежит
 - Правила модулей: `CLAUDE.md` (обязательно к соблюдению, проверяется ArchTests в CI).
-- Решения: `docs/adr/` (31 шт). Начать с 0001 (монолит), 0008 (saga),
+- Решения: `docs/adr/` (36 шт), спеки CTRM — `docs/specs/`. Начать с 0001 (монолит), 0008 (saga),
   0005 (multi-tenancy), 0030 (web UI).
 - Ежедневные логи: `.remember/today-*.done.md`, сводка — `.remember/recent.md`.
 - API: `src/Seamline.Api`, модули: `src/Modules/`, воркеры: `src/Seamline.*.Worker/`.

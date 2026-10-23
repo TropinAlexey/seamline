@@ -1,6 +1,7 @@
 # Spec 01 — Coal cargo: logistics, actualization, quality, provisional and final invoices
 
-Status: **specified** ([ADR-0034](../adr/0034-coal-cargo-logistics.md)).
+Status: **implemented** ([ADR-0034](../adr/0034-coal-cargo-logistics.md), amended by
+[ADR-0037](../adr/0037-shipment-lives-in-trading.md): the shipment lives in Trading).
 Depends on [spec 00](00-commodity-master-data.md).
 
 ## Problem
@@ -39,18 +40,20 @@ public). For `Cargo` commodities the trade carries `CargoTerms`:
 | `incoterm` | enum, `FOB` only | FOB |
 | `tolerance_pct` | numeric(5,2), 0–20, seller's option | 10.00 |
 | `laycan_from`, `laycan_to` | date, `from ≤ to`, inside `deliveryPeriod` | 2027-03-10 … 2027-03-20 |
-| `quality_spec` | snapshot of the commodity's spec at activation | base NAR 6000, reject < 5700, S ≤ 1.00 %, ash ≤ 16.00 % |
+| `quality_spec` | snapshot of the commodity's spec at booking | base NAR 6000, reject < 5700, S ≤ 1.00 %, ash ≤ 16.00 % |
 
 `deliveryPeriod` stays `YYYY-MM` and means the shipment month: positions,
 curves and stress keep working per month. The laycan dates live alongside
 it, they do not replace it.
 
-## Shipment lifecycle (Logistics module)
+## Shipment lifecycle (in Trading, ADR-0037)
+
+An Active cargo trade without a shipment is "awaiting nomination". The
+shipment row is created at nomination; there is one per trade.
 
 | From | Action (BO) | To | Rule |
 |---|---|---|---|
-| — | `TradeActivated` for a `Cargo` commodity | `Open` | One shipment per trade |
-| `Open` | Nominate vessel (name, IMO number, ETA) | `Nominated` | ETA within laycan, IMO is 7 digits |
+| — (Active trade) | Nominate vessel (name, IMO number, ETA) | `Nominated` | ETA within laycan, IMO is 7 digits, no earlier nomination |
 | `Nominated` | Record loading (B/L date, B/L quantity) | `Loaded` | B/L quantity within contract ± tolerance, else 409 |
 | `Loaded` | Record certificate (NAR, sulphur, ash) | `QualityCertified` | Every parameter within rejection limits |
 | `Loaded` | Record certificate outside limits | `QualityRejected` | Terminal. The claim is handled outside the system |
@@ -64,10 +67,11 @@ Loading is not an amendment. `Amend` stays what ADR-0011 made it, a
 commercial correction of the contract. Actualization records what physically
 happened within the contract:
 
-1. Logistics publishes `CargoLoaded(TradeId, BlQuantity, BlDate, Actor)`.
-2. Trading moves the trade `Active → Delivered`, records
-   `ActualVolume = BlQuantity` next to the unchanged contract `Volume`, and
-   publishes `TradeDelivered` with both quantities.
+1. Recording the B/L is one transaction (ADR-0037). The shipment moves to
+   `Loaded` and the trade moves `Active → Delivered`, with
+   `ActualVolume = BlQuantity` next to the unchanged contract `Volume`.
+2. `TradeDelivered` carries both quantities and the cargo terms, through
+   the same outbox. If the tolerance check fails, nothing is written.
 3. For cargo commodities, `POST /trades/{id}/deliver` returns 409: delivery
    comes from loading, not from a button.
 
@@ -115,34 +119,41 @@ A B/L of 83,000 t would be rejected (above 82,500). A certificate with
 sulphur 1.20 % would put the shipment in `QualityRejected` and no final
 invoice would be issued.
 
-## Integration events (`Logistics.Contracts`)
+## Integration events (`Trading.Contracts`)
 
-All carry `TradeId, TenantId, Actor, Reason`; published through the outbox.
+All carry `TradeId, TenantId, Actor, Reason` and are published through
+Trading's outbox.
 
 - `CargoNominated(VesselName, Imo, Eta)`
-- `CargoLoaded(BlQuantity, BlDate)`
 - `CargoQualityCertified(MeasuredNar, SulphurPct, AshPct, BaseNar)`
 - `CargoQualityRejected(MeasuredNar, SulphurPct, AshPct)`
+- Loading is announced by `TradeDelivered`, which gains `ContractVolume`
+  and `CargoTerms`. Both are nullable, so messages already in the outbox
+  still deserialize.
 
-`TradeActivated` gains an optional `CargoTerms` and `TradeDelivered` gains
-`ContractVolume` (additive changes). Consumers: Trading (`CargoLoaded`),
-Settlement (`TradeDelivered`, `CargoQualityCertified`), Audit (all of them).
+Consumers:
+- Settlement: `TradeDelivered` (provisional invoice), `CargoQualityCertified`
+  (final invoice; retried until the provisional exists);
+- Risk: `TradeDelivered` (close-out on `ContractVolume`);
+- Audit: all of them.
 
 ## Module ownership
 
 | Module | Owns |
 |---|---|
-| Trading | Contract and cargo terms, the trade lifecycle, `ActualVolume` |
-| Logistics (new) | Shipment, vessel nomination, B/L, certificate, shipment history |
+| Trading | Contract and cargo terms, the trade lifecycle, `ActualVolume`, and the shipment with its history (ADR-0037) |
 | Settlement | Provisional and final invoices and the balance |
 | Risk | Position close-out on the contract quantity |
 | Reporting | Nothing new: coal is not a REMIT product and is skipped |
 
 ## API and UI
 
-- `GET /shipments?state=` (BO, MO), `GET /shipments/{tradeId}`.
+- `GET /shipments` lists every Active or delivered cargo trade with its
+  shipment, including those awaiting nomination.
+- `GET /shipments/{tradeId}` (with the server-computed tolerance band) and
+  `GET /shipments/{tradeId}/history`.
 - `POST /shipments/{tradeId}/nominate`, `/load`, `/certify` (BO).
-- `GET /invoices` gains `kind`, `quantity`, `unitPrice`, `balance`.
+- `GET /invoices?tradeId=` gains `kind`, `quantity`, `unitPrice`, `balance`.
 - UI:
   - a **Shipments** page for BO, a list by state;
   - trade detail for a coal trade shows a **Shipment** panel (states,

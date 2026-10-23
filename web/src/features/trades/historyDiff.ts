@@ -4,6 +4,7 @@ import type { TradeHistoryEntry } from "../../api/queries/trading";
 const diffedFields = [
   "state",
   "volume",
+  "actualVolume",
   "price",
   "notional",
   "commodityCode",

@@ -23,6 +23,10 @@ describe("allowedActions", () => {
     expect(allowedActions(state, role)).toEqual(expected);
   });
 
+  it("never offers Deliver on a cargo trade — loading delivers it", () => {
+    expect(allowedActions("Active", "FO", { cargo: true })).toEqual(["amend"]);
+  });
+
   it("never offers anything to back office", () => {
     const states: TradeState[] = [
       "Draft",

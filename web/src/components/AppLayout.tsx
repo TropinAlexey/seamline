@@ -15,6 +15,7 @@ interface NavItem {
 export const navItems: readonly NavItem[] = [
   { to: "/trades", label: "Trades", roles: ["FO", "MO", "BO"] },
   { to: "/approvals", label: "Approvals", roles: ["MO"] },
+  { to: "/shipments", label: "Shipments", roles: ["FO", "MO", "BO"] },
   { to: "/positions", label: "Positions & MTM", roles: ["FO", "MO", "BO"] },
   { to: "/stress", label: "Stress", roles: ["MO", "BO"] },
   { to: "/curves", label: "Market data", roles: ["FO", "MO", "BO"] },

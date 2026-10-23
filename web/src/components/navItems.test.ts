@@ -8,6 +8,7 @@ describe("navigation role gating", () => {
   it("shows each role only the screens its API calls allow", () => {
     expect(visibleTo("FO")).toEqual([
       "/trades",
+      "/shipments",
       "/positions",
       "/curves",
       "/counterparties",
@@ -16,6 +17,7 @@ describe("navigation role gating", () => {
     expect(visibleTo("MO")).toEqual([
       "/trades",
       "/approvals",
+      "/shipments",
       "/positions",
       "/stress",
       "/curves",
@@ -25,6 +27,7 @@ describe("navigation role gating", () => {
     ]);
     expect(visibleTo("BO")).toEqual([
       "/trades",
+      "/shipments",
       "/positions",
       "/stress",
       "/curves",

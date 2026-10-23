@@ -36,6 +36,15 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     // append-only history table (ADR-0030).
     public DateTimeOffset LastChangedAt { get; private set; }
 
+    // Cargo commodities only (ADR-0034). Null for flow commodities.
+    public CargoTerms? CargoTerms { get; private set; }
+
+    // The quantity actually delivered, set when a cargo is loaded (the B/L
+    // quantity). Volume stays the contract quantity: loading within the
+    // tolerance is performance of the contract, not a change to it — a
+    // change to it is Amend (ADR-0011, ADR-0034).
+    public decimal? ActualVolume { get; private set; }
+
     private Trade() { }
 
     public static Trade CreateDraft(
@@ -45,7 +54,8 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
         TradeDirection direction,
         decimal volume,
         decimal price,
-        Guid counterpartyId)
+        Guid counterpartyId,
+        CargoTerms? cargoTerms = null)
     {
         if (string.IsNullOrWhiteSpace(commodityCode))
             throw new ArgumentException("Commodity code is required.", nameof(commodityCode));
@@ -54,6 +64,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
             throw new ArgumentOutOfRangeException(nameof(volume), "Volume must be positive.");
         if (price <= 0)
             throw new ArgumentOutOfRangeException(nameof(price), "Price must be positive.");
+        cargoTerms?.RequireLaycanWithin(deliveryPeriod);
 
         return new Trade
         {
@@ -65,6 +76,7 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
             Volume = volume,
             Price = price,
             CounterpartyId = counterpartyId,
+            CargoTerms = cargoTerms,
             State = TradeState.Draft,
             Version = 1,
             LastChangedAt = DateTimeOffset.UtcNow
@@ -154,11 +166,42 @@ internal sealed class Trade : TenantOwnedEntity<Guid>
     public (TradeHistory History, TradeDelivered Event) Deliver(string changedBy, string changeReason)
     {
         RequireState(nameof(Deliver), TradeState.Active);
+        if (CargoTerms is not null)
+            throw new DomainRuleViolationException(
+                $"Trade {Id} is a cargo trade: it is delivered by recording the loading (B/L), not directly.");
         State = TradeState.Delivered;
         Touch();
         var history = TradeHistory.CreateSnapshot(this, changedBy, changeReason);
         var delivered = new TradeDelivered(
-            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, Volume, Price, changedBy, changeReason);
+            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, Volume, Price, changedBy, changeReason,
+            ContractVolume: Volume);
+        return (history, delivered);
+    }
+
+    // FOB cargo: title passes at loading, so the B/L is the delivery
+    // (ADR-0034). The loaded quantity must sit inside the contract's
+    // tolerance band; outside it is a breach, and changing the contract
+    // quantity is a commercial decision that goes through Amend first.
+    public (TradeHistory History, TradeDelivered Event) DeliverLoaded(string changedBy, decimal blQuantity, DateOnly blDate)
+    {
+        RequireState(nameof(DeliverLoaded), TradeState.Active);
+        if (CargoTerms is null)
+            throw new DomainRuleViolationException($"Trade {Id} is not a cargo trade.");
+
+        var (min, max) = CargoTerms.ToleranceBand(Volume);
+        if (blQuantity < min || blQuantity > max)
+            throw new DomainRuleViolationException(
+                $"B/L quantity {blQuantity:0.000} is outside the contract tolerance {min:0.000}–{max:0.000}. " +
+                "Amend the contract quantity first.");
+
+        ActualVolume = blQuantity;
+        State = TradeState.Delivered;
+        Touch();
+        var reason = $"Loaded: B/L {blDate:yyyy-MM-dd}, {blQuantity:0.000}";
+        var history = TradeHistory.CreateSnapshot(this, changedBy, reason);
+        var delivered = new TradeDelivered(
+            Id, TenantId.Value, CommodityCode, DeliveryPeriod, Direction, CounterpartyId, blQuantity, Price, changedBy, reason,
+            ContractVolume: Volume, CargoTerms: CargoTerms.ToRef());
         return (history, delivered);
     }
 

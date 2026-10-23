@@ -11,11 +11,14 @@ public static class SettlementEndpoints
 {
     public static IEndpointRouteBuilder MapSettlementEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/invoices", async (SettlementDbContext db, CancellationToken ct) =>
+        app.MapGet("/invoices", async (Guid? tradeId, SettlementDbContext db, CancellationToken ct) =>
         {
-            var invoices = await db.Invoices
+            var query = db.Invoices.AsQueryable();
+            if (tradeId is not null)
+                query = query.Where(i => i.TradeId == tradeId);
+            var invoices = await query
                 .OrderByDescending(i => i.IssuedAt)
-                .Select(i => new InvoiceEntry(i.TradeId, i.CounterpartyId, i.Amount, i.IssuedAt))
+                .Select(i => new InvoiceEntry(i.TradeId, i.CounterpartyId, i.Amount, i.IssuedAt, i.Kind, i.Quantity, i.UnitPrice, i.Balance))
                 .ToListAsync(ct);
             return Results.Ok(invoices);
         })
@@ -27,4 +30,12 @@ public static class SettlementEndpoints
     }
 }
 
-internal sealed record InvoiceEntry(Guid TradeId, Guid CounterpartyId, decimal Amount, DateTimeOffset IssuedAt);
+internal sealed record InvoiceEntry(
+    Guid TradeId,
+    Guid CounterpartyId,
+    decimal Amount,
+    DateTimeOffset IssuedAt,
+    InvoiceKind Kind,
+    decimal? Quantity,
+    decimal? UnitPrice,
+    decimal? Balance);

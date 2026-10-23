@@ -11,6 +11,7 @@ import { CurvesPage } from "./features/curves/CurvesPage";
 import { InvoicesPage } from "./features/invoices/InvoicesPage";
 import { LoginPage } from "./features/login/LoginPage";
 import { PositionsPage } from "./features/positions/PositionsPage";
+import { ShipmentsPage } from "./features/shipments/ShipmentsPage";
 import { StressPage } from "./features/stress/StressPage";
 import { TradeDetailPage } from "./features/trades/TradeDetailPage";
 import { TradesPage } from "./features/trades/TradesPage";
@@ -36,6 +37,7 @@ export function AppRoutes() {
         <Route path="/trades/:id" element={<TradeDetailPage />} />
         <Route path="/counterparties" element={<CounterpartiesPage />} />
         <Route path="/commodities" element={<CommoditiesPage />} />
+        <Route path="/shipments" element={<ShipmentsPage />} />
         <Route path="/positions" element={<PositionsPage />} />
         <Route path="/curves" element={<CurvesPage />} />
         <Route

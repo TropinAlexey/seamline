@@ -106,3 +106,37 @@ internal sealed class TradeDeliveredAuditConsumer(AuditDbContext db, TenantConte
             context.CancellationToken);
     }
 }
+
+// Cargo shipment steps (ADR-0034). Loading is audited as TradeDelivered.
+internal sealed class CargoNominatedAuditConsumer(AuditDbContext db, TenantContext tenantContext) : IConsumer<CargoNominated>
+{
+    public Task Consume(ConsumeContext<CargoNominated> context)
+    {
+        var message = context.Message;
+        return AuditRecorder.RecordAsync(
+            db, tenantContext, message.TenantId, message.Actor, nameof(CargoNominated), message.TradeId, message.Reason,
+            context.CancellationToken);
+    }
+}
+
+internal sealed class CargoQualityCertifiedAuditConsumer(AuditDbContext db, TenantContext tenantContext) : IConsumer<CargoQualityCertified>
+{
+    public Task Consume(ConsumeContext<CargoQualityCertified> context)
+    {
+        var message = context.Message;
+        return AuditRecorder.RecordAsync(
+            db, tenantContext, message.TenantId, message.Actor, nameof(CargoQualityCertified), message.TradeId, message.Reason,
+            context.CancellationToken);
+    }
+}
+
+internal sealed class CargoQualityRejectedAuditConsumer(AuditDbContext db, TenantContext tenantContext) : IConsumer<CargoQualityRejected>
+{
+    public Task Consume(ConsumeContext<CargoQualityRejected> context)
+    {
+        var message = context.Message;
+        return AuditRecorder.RecordAsync(
+            db, tenantContext, message.TenantId, message.Actor, nameof(CargoQualityRejected), message.TradeId, message.Reason,
+            context.CancellationToken);
+    }
+}

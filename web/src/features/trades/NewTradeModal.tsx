@@ -27,6 +27,10 @@ const schema = z.object({
   volume: z.number({ error: "Volume is required" }).positive("Volume must be positive"),
   price: z.number({ error: "Price is required" }).positive("Price must be positive"),
   counterpartyId: z.string().min(1, "Counterparty is required"),
+  // Cargo commodities only (ADR-0034); the server rejects them on flow ones.
+  tolerancePct: z.number().min(0).max(20).optional(),
+  laycanFrom: z.string().optional(),
+  laycanTo: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -51,13 +55,25 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
   });
 
   // Volume and price are in the selected commodity's unit (ADR-0033).
-  const unit = unitOf(useWatch({ control, name: "commodityCode" })) ?? "unit";
+  const commodityCode = useWatch({ control, name: "commodityCode" });
+  const unit = unitOf(commodityCode) ?? "unit";
+  const isCargo = commodities?.find((c) => c.code === commodityCode)?.deliveryModel === "Cargo";
 
   const submit = (andSubmit: boolean) =>
     handleSubmit(async (values) => {
       setServerError(null);
       try {
-        const { id } = await createTrade.mutateAsync(values);
+        const { tolerancePct, laycanFrom, laycanTo, ...trade } = values;
+        const { id } = await createTrade.mutateAsync({
+          ...trade,
+          cargoTerms: isCargo
+            ? {
+                tolerancePct: tolerancePct ?? 0,
+                laycanFrom: laycanFrom ?? "",
+                laycanTo: laycanTo ?? "",
+              }
+            : null,
+        });
         if (andSubmit) {
           const { data } = await runTradeAction(id, "submit");
           notifySuccess(
@@ -142,6 +158,26 @@ export function NewTradeModal({ opened, onClose }: { opened: boolean; onClose: (
               )}
             />
           </Group>
+          {isCargo && (
+            <Group grow align="flex-start">
+              <Controller
+                control={control}
+                name="tolerancePct"
+                render={({ field, fieldState }) => (
+                  <NumberInput
+                    label="Tolerance (%)"
+                    description="Seller's option, FOB"
+                    value={field.value ?? ""}
+                    onChange={(v) => field.onChange(typeof v === "number" ? v : undefined)}
+                    decimalScale={2}
+                    error={fieldState.error?.message}
+                  />
+                )}
+              />
+              <TextInput type="date" label="Laycan from" {...register("laycanFrom")} />
+              <TextInput type="date" label="Laycan to" {...register("laycanTo")} />
+            </Group>
+          )}
           <Controller
             control={control}
             name="counterpartyId"

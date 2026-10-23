@@ -42,6 +42,9 @@ internal sealed class RemitReportingRunner(IServiceProvider services, ILogger<Re
         var candidates = await db.TradeHistory
             .Where(h => ReportableStates.Contains(h.State))
             .Where(h => !db.RemitReports.Any(r => r.TradeId == h.TradeId && r.Version == h.Version))
+            // Coal is not a REMIT product (electricity and natural gas only):
+            // cargo trades are never reported (ADR-0034).
+            .Where(h => db.Trades.Any(t => t.Id == h.TradeId && t.CargoTerms == null))
             .OrderBy(h => h.TradeId).ThenBy(h => h.Version)
             .ToListAsync(cancellationToken);
 
@@ -106,6 +109,7 @@ internal sealed class RemitReportingRunner(IServiceProvider services, ILogger<Re
         return await db.TradeHistory.IgnoreQueryFilters()
             .Where(h => ReportableStates.Contains(h.State))
             .Where(h => !db.RemitReports.IgnoreQueryFilters().Any(r => r.TradeId == h.TradeId && r.Version == h.Version))
+            .Where(h => db.Trades.IgnoreQueryFilters().Any(t => t.Id == h.TradeId && t.CargoTerms == null))
             .Select(h => h.TenantId.Value)
             .Distinct()
             .ToListAsync(cancellationToken);

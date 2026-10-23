@@ -24,9 +24,16 @@ export const actionOrder: readonly UiTradeAction[] = [
   "cancel",
 ];
 
-export function allowedActions(state: TradeState, role: Role): UiTradeAction[] {
+// A cargo trade is delivered by recording its loading on the shipment
+// (ADR-0034), never by the Deliver button — the API answers 409 to it.
+export function allowedActions(
+  state: TradeState,
+  role: Role,
+  options: { cargo?: boolean } = {},
+): UiTradeAction[] {
   return actionOrder.filter((action) => {
     const rule = transitions[action];
+    if (action === "deliver" && options.cargo) return false;
     return rule.role === role && rule.from.includes(state);
   });
 }

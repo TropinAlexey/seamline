@@ -20,19 +20,21 @@ public sealed class CommodityTests(SeamlineApiFactory factory) : IClassFixture<S
     };
 
     [Fact]
-    public async Task Every_tenant_starts_with_the_flow_commodities_in_MWh()
+    public async Task Every_tenant_starts_with_power_and_gas_in_MWh_and_coal_in_tonnes()
     {
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.BackOffice);
 
         var commodities = await client.GetFromJsonAsync<List<CommodityDto>>("/commodities");
 
-        Assert.Equal(["GAS", "POWER"], commodities!.Select(c => c.Code));
-        Assert.All(commodities!, c =>
+        Assert.Equal(["COAL", "GAS", "POWER"], commodities!.Select(c => c.Code));
+        Assert.All(commodities!.Where(c => c.Code != "COAL"), c =>
         {
             Assert.Equal("MWh", c.Unit);
             Assert.Equal("Flow", c.DeliveryModel);
             Assert.Null(c.QualitySpec);
         });
+        var coal = commodities!.Single(c => c.Code == "COAL");
+        Assert.Equal(("Tonne", "Cargo", 6000.0m), (coal.Unit, coal.DeliveryModel, coal.QualitySpec!.BaseNarKcalKg));
     }
 
     [Fact]
@@ -42,8 +44,8 @@ public sealed class CommodityTests(SeamlineApiFactory factory) : IClassFixture<S
 
         var response = await client.PostAsJsonAsync("/commodities", new
         {
-            code = "COAL",
-            name = "Steam coal",
+            code = "COKING-COAL",
+            name = "Coking coal",
             unit = "Tonne",
             deliveryModel = "Cargo",
             qualitySpec = CoalSpec
@@ -102,7 +104,7 @@ public sealed class CommodityTests(SeamlineApiFactory factory) : IClassFixture<S
 
         var response = await client.PostAsJsonAsync("/commodities", new
         {
-            code = "COAL",
+            code = "COKING-COAL",
             name = "Steam coal",
             unit = "Tonne",
             deliveryModel = "Cargo",
@@ -116,9 +118,9 @@ public sealed class CommodityTests(SeamlineApiFactory factory) : IClassFixture<S
     public async Task The_quality_spec_of_a_cargo_commodity_can_change_but_a_flow_commodity_has_none()
     {
         var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.MiddleOffice);
-        await client.PostAsJsonAsync("/commodities", new { code = "COAL", name = "Steam coal", unit = "Tonne", deliveryModel = "Cargo", qualitySpec = CoalSpec });
+        await client.PostAsJsonAsync("/commodities", new { code = "COKING-COAL", name = "Coking coal", unit = "Tonne", deliveryModel = "Cargo", qualitySpec = CoalSpec });
 
-        var changed = await client.PutAsJsonAsync("/commodities/COAL/quality-spec",
+        var changed = await client.PutAsJsonAsync("/commodities/COKING-COAL/quality-spec",
             new { baseNarKcalKg = 5500.0m, rejectBelowNarKcalKg = 5200.0m, maxSulphurPct = 0.80m, maxAshPct = 15.00m });
         var onFlow = await client.PutAsJsonAsync("/commodities/GAS/quality-spec", CoalSpec);
         var missing = await client.PutAsJsonAsync("/commodities/NOPE/quality-spec", CoalSpec);
@@ -155,11 +157,11 @@ public sealed class CommodityTests(SeamlineApiFactory factory) : IClassFixture<S
     {
         var tenantA = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.MiddleOffice);
         var tenantB = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, Guid.NewGuid(), IdentityRoles.MiddleOffice);
-        await tenantA.PostAsJsonAsync("/commodities", new { code = "COAL", name = "Steam coal", unit = "Tonne", deliveryModel = "Cargo", qualitySpec = CoalSpec });
+        await tenantA.PostAsJsonAsync("/commodities", new { code = "COKING-COAL", name = "Coking coal", unit = "Tonne", deliveryModel = "Cargo", qualitySpec = CoalSpec });
 
         var seenByB = await tenantB.GetFromJsonAsync<List<CommodityDto>>("/commodities");
 
-        Assert.DoesNotContain(seenByB!, c => c.Code == "COAL");
+        Assert.DoesNotContain(seenByB!, c => c.Code == "COKING-COAL");
     }
 
     [Fact]

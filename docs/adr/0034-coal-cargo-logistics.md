@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Specified, not yet implemented ([spec 01](../specs/01-coal-cargo.md)).
+Accepted. Implemented ([spec 01](../specs/01-coal-cargo.md)).
+**Amended in part by:** [ADR-0037](0037-shipment-lives-in-trading.md) (the shipment lives in Trading, not a Logistics module; no `Open` state; no `CargoLoaded` event).
 
 ## Context
 

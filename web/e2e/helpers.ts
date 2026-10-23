@@ -66,6 +66,7 @@ export async function api(tenant: TenantKey, user: DemoUser) {
       volume: number;
       price: number;
       counterpartyId: string;
+      cargoTerms?: { tolerancePct: number; laycanFrom: string; laycanTo: string };
     }) {
       return (await post<{ id: string }>("trades", body)).id;
     },

@@ -21,7 +21,7 @@ var tenants = new[]
 {
     new TenantSeed(
         "Tenant A", Guid.Parse("11111111-1111-1111-1111-111111111111"),
-        Counterparties: [("Northgate Utilities (demo)", 5_000_000m), ("Riverbend Gas (demo)", 2_000_000m), ("Pebble Trading (demo)", 50_000m)]),
+        Counterparties: [("Northgate Utilities (demo)", 5_000_000m), ("Riverbend Gas (demo)", 2_000_000m), ("Pebble Trading (demo)", 50_000m), ("Bulk Mining Co (demo)", 20_000_000m)]),
     new TenantSeed(
         "Tenant B", Guid.Parse("22222222-2222-2222-2222-222222222222"),
         Counterparties: [("Harbour Energy Partners (demo)", 3_000_000m), ("Kestrel Power (demo)", 1_000_000m)]),
@@ -32,6 +32,7 @@ foreach (var tenant in tenants)
     Console.WriteLine($"== {tenant.Name} ({tenant.Id})");
     var trader = await LoginAsync(tenant.Id, "trader");
     var risk = await LoginAsync(tenant.Id, "risk");
+    var backoffice = await LoginAsync(tenant.Id, "backoffice");
 
     var existing = await trader.GetFromJsonAsync<List<Counterparty>>("counterparties");
     if (existing is { Count: > 0 })
@@ -53,6 +54,7 @@ foreach (var tenant in tenants)
     {
         [("POWER", "2027-01")] = 92.40m, [("POWER", "2027-02")] = 88.10m, [("POWER", "2027-03")] = 79.75m,
         [("GAS", "2027-01")] = 36.20m, [("GAS", "2027-02")] = 34.85m, [("GAS", "2027-03")] = 31.10m,
+        [("COAL", "2027-03")] = 108.00m, [("COAL", "2027-04")] = 111.50m,
     };
     foreach (var ((commodity, period), price) in curve)
         await SendAsync(risk, HttpMethod.Post, "curve-points", new { commodityCode = commodity, deliveryPeriod = period, price });
@@ -91,6 +93,20 @@ foreach (var tenant in tenants)
         // Cancelled while still a draft.
         var cancelled = await CreateAsync(trader, "POWER", "2027-02", "Sell", 75m, 87.00m, big);
         await SendAsync(trader, HttpMethod.Post, $"trades/{cancelled}/cancel", body: null);
+
+        // Coal cargoes (ADR-0034, spec 01). The worked example, settled end
+        // to end by back office: provisional 8,635,000.00, final
+        // 8,519,864.05, balance -115,135.95.
+        var bulk = counterparties[3].Id;
+        var cargo = await CreateCargoAsync(trader, "2027-03", "Buy", 75_000m, 110.00m, bulk, 10m, "2027-03-10", "2027-03-20");
+        await SubmitAsync(trader, cargo);
+        await SendAsync(backoffice, HttpMethod.Post, $"shipments/{cargo}/nominate", new { vesselName = "MV Demo Carrier", imo = "9876543", eta = "2027-03-12" });
+        await SendAsync(backoffice, HttpMethod.Post, $"shipments/{cargo}/load", new { blQuantity = 78_500m, blDate = "2027-03-14" });
+        await SendAsync(backoffice, HttpMethod.Post, $"shipments/{cargo}/certify", new { measuredNarKcalKg = 5_920.0m, sulphurPct = 0.85m, ashPct = 14.20m });
+
+        // And one waiting for back office to nominate a vessel.
+        var awaiting = await CreateCargoAsync(trader, "2027-04", "Sell", 50_000m, 112.00m, bulk, 5m, "2027-04-05", "2027-04-15");
+        await SubmitAsync(trader, awaiting);
     }
     else
     {
@@ -119,6 +135,18 @@ async Task<HttpClient> LoginAsync(Guid tenantId, string login)
 async Task<Guid> CreateAsync(HttpClient client, string commodity, string period, string direction, decimal volume, decimal price, Guid counterpartyId)
 {
     var created = await PostAsync<IdResult>(client, "trades", new { commodityCode = commodity, deliveryPeriod = period, direction, volume, price, counterpartyId });
+    return created.Id;
+}
+
+async Task<Guid> CreateCargoAsync(
+    HttpClient client, string period, string direction, decimal volume, decimal price, Guid counterpartyId,
+    decimal tolerancePct, string laycanFrom, string laycanTo)
+{
+    var created = await PostAsync<IdResult>(client, "trades", new
+    {
+        commodityCode = "COAL", deliveryPeriod = period, direction, volume, price, counterpartyId,
+        cargoTerms = new { tolerancePct, laycanFrom, laycanTo }
+    });
     return created.Id;
 }
 

@@ -132,3 +132,55 @@ export function useAmendTrade(id: string) {
     onSettled: () => queryClient.invalidateQueries({ queryKey: tradeKeys.all }),
   });
 }
+
+// Cargo shipments (ADR-0034). A shipment step can deliver the trade (B/L),
+// so every mutation refreshes the trade, its history and the invoices too.
+export type ShipmentEntry = Schemas["ShipmentEntry"];
+export type ShipmentState = Schemas["ShipmentState"];
+
+export const shipmentKeys = {
+  all: ["shipments"] as const,
+  detail: (tradeId: string) => ["shipments", tradeId] as const,
+};
+
+export function useShipments() {
+  return useQuery({
+    queryKey: shipmentKeys.all,
+    queryFn: () => unwrap(api.GET("/shipments")),
+  });
+}
+
+export function useShipment(tradeId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: shipmentKeys.detail(tradeId),
+    queryFn: () => unwrap(api.GET("/shipments/{tradeId}", { params: { path: { tradeId } } })),
+    enabled,
+  });
+}
+
+type ShipmentStep =
+  | { step: "nominate"; body: Schemas["NominateVesselRequest"] }
+  | { step: "load"; body: Schemas["RecordLoadingRequest"] }
+  | { step: "certify"; body: Schemas["RecordCertificateRequest"] };
+
+export function useShipmentStep(tradeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ShipmentStep) => {
+      const params = { path: { tradeId } };
+      switch (input.step) {
+        case "nominate":
+          return unwrap(api.POST("/shipments/{tradeId}/nominate", { params, body: input.body }));
+        case "load":
+          return unwrap(api.POST("/shipments/{tradeId}/load", { params, body: input.body }));
+        case "certify":
+          return unwrap(api.POST("/shipments/{tradeId}/certify", { params, body: input.body }));
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: shipmentKeys.all });
+      void queryClient.invalidateQueries({ queryKey: tradeKeys.all });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+}

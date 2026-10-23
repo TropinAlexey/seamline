@@ -18,3 +18,14 @@ export function formatCountdown(ms: number): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
+
+// A calendar date with no time ("2027-03-14"), shown without a timezone shift.
+export function formatDate(isoDate: string | null | undefined): string {
+  if (!isoDate) return "—";
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}

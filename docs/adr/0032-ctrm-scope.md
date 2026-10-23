@@ -64,7 +64,7 @@ are two ways out:
 
 | ADR | Effect |
 |---|---|
-| [0001](0001-modular-monolith.md) | Upheld. New capabilities are new modules (Logistics, Inventory) inside the monolith, with the same impl/Contracts split and arch tests. |
+| [0001](0001-modular-monolith.md) | Upheld. New capabilities are new modules inside the monolith (Inventory), or new aggregates in the module that owns the lifecycle they drive: the coal shipment ended up in Trading ([ADR-0037](0037-shipment-lives-in-trading.md)). |
 | [0002](0002-service-extraction-criteria.md) | Upheld. No new extracted process. Inventory valuation rides on the existing Valuation.Worker EOD pass. |
 | [0015](0015-reporting-worker.md) | Upheld. REMIT stays simplified and covers power and gas only. Coal is outside REMIT's scope, which is consistent with the regulation, not a gap. |
 | [0016](0016-stress-scenarios.md) | Upheld. No VaR. |

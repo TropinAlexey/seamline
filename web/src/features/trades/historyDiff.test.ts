@@ -15,6 +15,7 @@ function entry(overrides: Partial<TradeHistoryEntry>): TradeHistoryEntry {
     price: 45.5,
     notional: 4550,
     counterpartyId: "cp-1",
+    actualVolume: null,
     ...overrides,
   };
 }

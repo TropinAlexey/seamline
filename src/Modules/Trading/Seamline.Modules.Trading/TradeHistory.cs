@@ -25,6 +25,7 @@ internal sealed class TradeHistory
     public TradeDirection Direction { get; private init; }
     public decimal Volume { get; private init; }
     public decimal Price { get; private init; }
+    public decimal? ActualVolume { get; private init; }
     public Guid CounterpartyId { get; private init; }
     public TradeState State { get; private init; }
 
@@ -46,6 +47,7 @@ internal sealed class TradeHistory
             Direction = trade.Direction,
             Volume = trade.Volume,
             Price = trade.Price,
+            ActualVolume = trade.ActualVolume,
             CounterpartyId = trade.CounterpartyId,
             State = trade.State
         };

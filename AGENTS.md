@@ -16,15 +16,15 @@ Multi-tenant mini-CTRM (power/gas forwards) на .NET 10 — модульный 
 ## Текущий статус (2026-10-23, ветка `main`)
 - **Фазы 1–5 завершены, Фаза 6 (Web UI) — Phase A и B закоммичены.** Phase C
   (SignalR) и D (облачный деплой web) — вне скоупа, пока не попросят.
-- **Фаза 7 (CTRM):** ADR-0032…0036, `docs/specs/00–03`, gap analysis. Шаг 1
-  (commodity master data, ADR-0033) реализован; шаги 2–4 специфицированы.
-  36 ADR.
-- Тесты: 254 .NET (110 unit + 69 arch + 75 integration) + web 28 unit (Vitest)
-  + 11 E2E (Playwright против compose).
+- **Фаза 7 (CTRM):** ADR-0032…0037, `docs/specs/00–03`, gap analysis.
+  Шаги 1 (справочник товаров) и 2 (уголь-карго, ADR-0034 + 0037) реализованы;
+  3 (формульная цена) и 4 (хранилище газа) специфицированы. 37 ADR.
+- Тесты: 282 .NET (128 unit + 69 arch + 85 integration) + web 29 unit (Vitest)
+  + 13 E2E (Playwright против compose).
 - CI — 4 job-ы, все зелёные: `build-and-test`, `api-contract` (OpenAPI не
   устарел), `web` (lint/format/typecheck/unit/build, TS-клиент == OpenAPI),
   `e2e` (compose с нуля + seed + Playwright, только push в main).
-- Последний коммит — Фаза 7, шаг 1 (commodity master data).
+- Последний коммит — Фаза 7, шаг 2 (уголь-карго).
 
 ## Что сделано последним (хронология)
 1. `d37719a` — бэкенд под UI: read-эндпоинты (blotter, history, exposure,
@@ -46,11 +46,16 @@ Multi-tenant mini-CTRM (power/gas forwards) на .NET 10 — модульный 
    POWER/GAS для демо-тенантов, RLS), `/commodities`, 400 на неизвестный
    товар в `POST /trades`, CurveImportRunner без хардкода, UI: выбор товара
    из справочника, единицы в blotter/detail, страница Commodities.
+8. Фаза 7, шаг 2: уголь-карго. Shipment в Trading (ADR-0037 — outbox один
+   на шину, погрузка = поставка в одной транзакции), CargoTerms на сделке,
+   ActualVolume, `/shipments`, Invoice Provisional/Final с балансом, Risk
+   закрывает ContractVolume, REMIT пропускает уголь, сид COAL, seed-скрипт
+   с примером из спеки, UI: панель Shipment, страница Shipments.
 
 ## Что дальше (приоритет сверху вниз)
-1. [ ] Фаза 7, шаг 2: уголь-карго (spec 01, ADR-0034) — модуль Logistics,
-       сид COAL, актуализация, provisional/final invoice.
-       Затем формульная цена (03) → хранилище (02).
+1. [ ] Фаза 7, шаг 3: формульная цена (spec 03, ADR-0035) — fixings в
+       MarketData, PricingTerms на сделке, expected price в Risk, финальный
+       счёт ждёт и сертификат, и k = N. Затем хранилище газа (02).
        После каждого шага — перенести строку в README из «specified» в
        «implemented», обновить gap analysis и CLAUDE.md Scope boundaries.
 2. [ ] Утренняя проверка: `dotnet build SeamlineCtrm.sln && dotnet test SeamlineCtrm.sln`,
@@ -79,7 +84,7 @@ cd web && npm run e2e                                   # Playwright проти�
 
 ## Где что лежит
 - Правила модулей: `CLAUDE.md` (обязательно к соблюдению, проверяется ArchTests в CI).
-- Решения: `docs/adr/` (36 шт), спеки CTRM — `docs/specs/`. Начать с 0001 (монолит), 0008 (saga),
+- Решения: `docs/adr/` (37 шт), спеки CTRM — `docs/specs/`. Начать с 0001 (монолит), 0008 (saga),
   0005 (multi-tenancy), 0030 (web UI).
 - Ежедневные логи: `.remember/today-*.done.md`, сводка — `.remember/recent.md`.
 - API: `src/Seamline.Api`, модули: `src/Modules/`, воркеры: `src/Seamline.*.Worker/`.

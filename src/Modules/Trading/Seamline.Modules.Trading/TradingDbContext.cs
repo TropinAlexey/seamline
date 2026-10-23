@@ -12,6 +12,8 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
     public DbSet<Trade> Trades => Set<Trade>();
     public DbSet<TradeHistory> TradeHistory => Set<TradeHistory>();
     public DbSet<RemitReport> RemitReports => Set<RemitReport>();
+    public DbSet<Shipment> Shipments => Set<Shipment>();
+    public DbSet<ShipmentHistory> ShipmentHistory => Set<ShipmentHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +35,18 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
             builder.Property(t => t.State).HasColumnName("state").HasConversion<string>().HasMaxLength(20);
             builder.Property(t => t.Version).HasColumnName("version");
             builder.Property(t => t.LastChangedAt).HasColumnName("last_changed_at");
+            builder.Property(t => t.ActualVolume).HasColumnName("actual_volume").HasPrecision(18, 3);
+
+            builder.OwnsOne(t => t.CargoTerms, terms =>
+            {
+                terms.Property(c => c.TolerancePct).HasColumnName("cargo_tolerance_pct").HasPrecision(5, 2);
+                terms.Property(c => c.LaycanFrom).HasColumnName("cargo_laycan_from");
+                terms.Property(c => c.LaycanTo).HasColumnName("cargo_laycan_to");
+                terms.Property(c => c.BaseNarKcalKg).HasColumnName("cargo_base_nar_kcal_kg").HasPrecision(7, 1);
+                terms.Property(c => c.RejectBelowNarKcalKg).HasColumnName("cargo_reject_below_nar_kcal_kg").HasPrecision(7, 1);
+                terms.Property(c => c.MaxSulphurPct).HasColumnName("cargo_max_sulphur_pct").HasPrecision(5, 2);
+                terms.Property(c => c.MaxAshPct).HasColumnName("cargo_max_ash_pct").HasPrecision(5, 2);
+            });
 
             builder.HasIndex(t => new { t.TenantId, t.LastChangedAt });
             builder.HasQueryFilter(t => t.TenantId == tenantContext.TenantId);
@@ -59,6 +73,7 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
             builder.Property(h => h.Direction).HasColumnName("direction").HasConversion<string>().HasMaxLength(10);
             builder.Property(h => h.Volume).HasColumnName("volume").HasPrecision(18, 3);
             builder.Property(h => h.Price).HasColumnName("price").HasPrecision(18, 4);
+            builder.Property(h => h.ActualVolume).HasColumnName("actual_volume").HasPrecision(18, 3);
             builder.Property(h => h.CounterpartyId).HasColumnName("counterparty_id");
             builder.Property(h => h.State).HasColumnName("state").HasConversion<string>().HasMaxLength(20);
 
@@ -101,6 +116,59 @@ internal sealed class TradingDbContext(DbContextOptions<TradingDbContext> option
 
             builder.HasIndex(r => new { r.TradeId, r.Version }).IsUnique();
             builder.HasQueryFilter(r => r.TenantId == tenantContext.TenantId);
+        });
+
+        // Cargo shipments (ADR-0034, ADR-0037). One per trade.
+        modelBuilder.Entity<Shipment>(builder =>
+        {
+            builder.ToTable("shipment");
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.TenantId)
+                .HasConversion(t => t.Value, v => new TenantId(v))
+                .HasColumnName("tenant_id");
+            builder.Property(x => x.TradeId).HasColumnName("trade_id");
+            builder.Property(x => x.State).HasColumnName("state").HasConversion<string>().HasMaxLength(20);
+            builder.Property(x => x.VesselName).HasColumnName("vessel_name").HasMaxLength(100).IsRequired();
+            builder.Property(x => x.Imo).HasColumnName("imo").HasMaxLength(7).IsRequired();
+            builder.Property(x => x.Eta).HasColumnName("eta");
+            builder.Property(x => x.BlQuantity).HasColumnName("bl_quantity").HasPrecision(18, 3);
+            builder.Property(x => x.BlDate).HasColumnName("bl_date");
+            builder.Property(x => x.MeasuredNarKcalKg).HasColumnName("measured_nar_kcal_kg").HasPrecision(7, 1);
+            builder.Property(x => x.SulphurPct).HasColumnName("sulphur_pct").HasPrecision(5, 2);
+            builder.Property(x => x.AshPct).HasColumnName("ash_pct").HasPrecision(5, 2);
+            builder.Property(x => x.Version).HasColumnName("version");
+            builder.Property(x => x.LastChangedAt).HasColumnName("last_changed_at");
+
+            builder.HasIndex(x => x.TradeId).IsUnique();
+            builder.HasQueryFilter(x => x.TenantId == tenantContext.TenantId);
+        });
+
+        // Append-only like trade_history: SELECT/INSERT only (ADR-0006).
+        modelBuilder.Entity<ShipmentHistory>(builder =>
+        {
+            builder.ToTable("shipment_history");
+            builder.HasKey(h => h.Id);
+            builder.Property(h => h.ShipmentId).HasColumnName("shipment_id");
+            builder.Property(h => h.TradeId).HasColumnName("trade_id");
+            builder.Property(h => h.TenantId)
+                .HasConversion(t => t.Value, v => new TenantId(v))
+                .HasColumnName("tenant_id");
+            builder.Property(h => h.Version).HasColumnName("version");
+            builder.Property(h => h.ValidFrom).HasColumnName("valid_from");
+            builder.Property(h => h.ChangedBy).HasColumnName("changed_by").HasMaxLength(100).IsRequired();
+            builder.Property(h => h.ChangeReason).HasColumnName("change_reason").HasMaxLength(500).IsRequired();
+            builder.Property(h => h.State).HasColumnName("state").HasConversion<string>().HasMaxLength(20);
+            builder.Property(h => h.VesselName).HasColumnName("vessel_name").HasMaxLength(100).IsRequired();
+            builder.Property(h => h.Imo).HasColumnName("imo").HasMaxLength(7).IsRequired();
+            builder.Property(h => h.Eta).HasColumnName("eta");
+            builder.Property(h => h.BlQuantity).HasColumnName("bl_quantity").HasPrecision(18, 3);
+            builder.Property(h => h.BlDate).HasColumnName("bl_date");
+            builder.Property(h => h.MeasuredNarKcalKg).HasColumnName("measured_nar_kcal_kg").HasPrecision(7, 1);
+            builder.Property(h => h.SulphurPct).HasColumnName("sulphur_pct").HasPrecision(5, 2);
+            builder.Property(h => h.AshPct).HasColumnName("ash_pct").HasPrecision(5, 2);
+
+            builder.HasIndex(h => new { h.ShipmentId, h.Version }).IsUnique();
+            builder.HasQueryFilter(h => h.TenantId == tenantContext.TenantId);
         });
 
         // Transactional outbox: TradeActivated/TradeRejected are written in

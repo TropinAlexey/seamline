@@ -215,7 +215,9 @@ export interface paths {
     };
     get: {
       parameters: {
-        query?: never;
+        query?: {
+          tradeId?: string;
+        };
         header?: never;
         path?: never;
         cookie?: never;
@@ -1065,6 +1067,320 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/shipments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ShipmentEntry"][];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/shipments/{tradeId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          tradeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ShipmentEntry"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/shipments/{tradeId}/history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          tradeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ShipmentHistoryEntry"][];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/shipments/{tradeId}/nominate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          tradeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["NominateVesselRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ShipmentEntry"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/shipments/{tradeId}/load": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          tradeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RecordLoadingRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ShipmentEntry"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/shipments/{tradeId}/certify": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          tradeId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RecordCertificateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ShipmentEntry"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/curve-points": {
     parameters: {
       query?: never;
@@ -1158,6 +1474,30 @@ export interface components {
       /** Format: int32 */
       total: number;
     };
+    CargoTermsRef: {
+      /** Format: double */
+      tolerancePct: number;
+      /** Format: date */
+      laycanFrom: string;
+      /** Format: date */
+      laycanTo: string;
+      /** Format: double */
+      baseNarKcalKg: number;
+      /** Format: double */
+      rejectBelowNarKcalKg: number;
+      /** Format: double */
+      maxSulphurPct: number;
+      /** Format: double */
+      maxAshPct: number;
+    };
+    CargoTermsRequest: {
+      /** Format: double */
+      tolerancePct: number;
+      /** Format: date */
+      laycanFrom: string;
+      /** Format: date */
+      laycanTo: string;
+    };
     CommodityRef: {
       code: string;
       name: string;
@@ -1202,6 +1542,7 @@ export interface components {
       price: number;
       /** Format: uuid */
       counterpartyId: string;
+      cargoTerms?: null | components["schemas"]["CargoTermsRequest"];
     };
     /** @enum {unknown} */
     CreditReservationOutcome: "Reserved" | "Breached";
@@ -1227,7 +1568,16 @@ export interface components {
       amount: number;
       /** Format: date-time */
       issuedAt: string;
+      kind: components["schemas"]["InvoiceKind"];
+      /** Format: double */
+      quantity: null | number;
+      /** Format: double */
+      unitPrice: null | number;
+      /** Format: double */
+      balance: null | number;
     };
+    /** @enum {unknown} */
+    InvoiceKind: "Standard" | "Provisional" | "Final";
     LoginRequest: {
       /** Format: uuid */
       tenantId: string;
@@ -1236,6 +1586,12 @@ export interface components {
     };
     LoginResponse: {
       token: string;
+    };
+    NominateVesselRequest: {
+      vesselName: string;
+      imo: string;
+      /** Format: date */
+      eta: string;
     };
     PositionRef: {
       commodityCode: string;
@@ -1264,6 +1620,20 @@ export interface components {
       /** Format: double */
       maxAshPct: number;
     };
+    RecordCertificateRequest: {
+      /** Format: double */
+      measuredNarKcalKg: number;
+      /** Format: double */
+      sulphurPct: number;
+      /** Format: double */
+      ashPct: number;
+    };
+    RecordLoadingRequest: {
+      /** Format: double */
+      blQuantity: number;
+      /** Format: date */
+      blDate: string;
+    };
     /** @enum {unknown} */
     RemitAction: "New" | "Modify" | "Terminate";
     RemitReportEntry: {
@@ -1282,6 +1652,48 @@ export interface components {
       /** Format: double */
       price: number;
     };
+    ShipmentEntry: {
+      /** Format: uuid */
+      tradeId: string;
+      commodityCode: string;
+      deliveryPeriod: string;
+      /** Format: double */
+      contractVolume: number;
+      /** Format: double */
+      toleranceMin: number;
+      /** Format: double */
+      toleranceMax: number;
+      /** Format: date */
+      laycanFrom: string;
+      /** Format: date */
+      laycanTo: string;
+      state: null | components["schemas"]["ShipmentState"];
+      vesselName: null | string;
+      imo: null | string;
+      /** Format: date */
+      eta: null | string;
+      /** Format: double */
+      blQuantity: null | number;
+      /** Format: date */
+      blDate: null | string;
+      /** Format: double */
+      measuredNarKcalKg: null | number;
+      /** Format: double */
+      sulphurPct: null | number;
+      /** Format: double */
+      ashPct: null | number;
+    };
+    ShipmentHistoryEntry: {
+      /** Format: int32 */
+      version: number;
+      /** Format: date-time */
+      validFrom: string;
+      changedBy: string;
+      changeReason: string;
+      state: components["schemas"]["ShipmentState"];
+    };
+    /** @enum {unknown} */
+    ShipmentState: "Nominated" | "Loaded" | "QualityCertified" | "QualityRejected" | null;
     StressEntry: {
       commodityCode: string;
       deliveryPeriod: string;
@@ -1343,6 +1755,8 @@ export interface components {
       notional: number;
       /** Format: uuid */
       counterpartyId: string;
+      /** Format: double */
+      actualVolume: null | number;
     };
     TradePage: {
       items: components["schemas"]["TradeSummary"][];
@@ -1382,6 +1796,9 @@ export interface components {
       version: number;
       /** Format: date-time */
       lastChangedAt: string;
+      /** Format: double */
+      actualVolume: null | number;
+      cargoTerms: null | components["schemas"]["CargoTermsRef"];
     };
     /** @enum {unknown} */
     UnitOfMeasure: "MWh" | "Tonne";

@@ -34,6 +34,11 @@ namespace Seamline.Modules.Settlement.Internal.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("amount");
 
+                    b.Property<decimal?>("Balance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("balance");
+
                     b.Property<Guid>("CounterpartyId")
                         .HasColumnType("uuid")
                         .HasColumnName("counterparty_id");
@@ -41,6 +46,17 @@ namespace Seamline.Modules.Settlement.Internal.Migrations
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("issued_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<decimal?>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -50,9 +66,14 @@ namespace Seamline.Modules.Settlement.Internal.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("trade_id");
 
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("unit_price");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("TradeId")
+                    b.HasIndex("TradeId", "Kind")
                         .IsUnique();
 
                     b.ToTable("invoice", "settlement");

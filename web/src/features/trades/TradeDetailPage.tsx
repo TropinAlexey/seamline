@@ -28,6 +28,7 @@ import { isConflict, notifyError, notifySuccess } from "../../components/notify"
 import { QueryState } from "../../components/QueryState";
 import { StateBadge } from "../../components/StateBadge";
 import { formatDateTime } from "../../format/date";
+import { ShipmentPanel } from "../shipments/ShipmentPanel";
 import { formatAmount, formatPrice, formatVolume } from "../../format/money";
 import { allowedActions, type UiTradeAction } from "./allowedActions";
 import { AmendModal } from "./AmendModal";
@@ -54,7 +55,8 @@ const actionColors: Partial<Record<UiTradeAction, string>> = {
 function formatChangeValue(change: FieldChange, value: FieldChange["from"]): string {
   switch (change.field) {
     case "volume":
-      return formatVolume(value as number);
+    case "actualVolume":
+      return formatVolume(value as number | null);
     case "price":
       return formatPrice(value as number);
     case "notional":
@@ -177,7 +179,9 @@ export function TradeDetailPage() {
             )}
 
           <Group data-testid="trade-actions">
-            {allowedActions(trade.data.state, session.role).map((action) => (
+            {allowedActions(trade.data.state, session.role, {
+              cargo: trade.data.cargoTerms != null,
+            }).map((action) => (
               <Button
                 key={action}
                 color={actionColors[action]}
@@ -190,6 +194,8 @@ export function TradeDetailPage() {
               </Button>
             ))}
           </Group>
+
+          {trade.data.cargoTerms && <ShipmentPanel trade={trade.data} />}
 
           <SimpleGrid cols={{ base: 1, lg: 2 }}>
             <Card withBorder>
@@ -235,7 +241,11 @@ export function TradeDetailPage() {
                 REMIT reports
               </Title>
               <QueryState isLoading={remit.isLoading} error={remit.error}>
-                {remit.data?.length ? (
+                {trade.data.cargoTerms ? (
+                  <Text c="dimmed" size="sm">
+                    Not reportable — REMIT covers electricity and natural gas, not coal.
+                  </Text>
+                ) : remit.data?.length ? (
                   <Table>
                     <Table.Thead>
                       <Table.Tr>

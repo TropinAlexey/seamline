@@ -68,11 +68,14 @@ README.
 
 ## Scope boundaries
 
-- Physical forwards only, power and gas. No options.
+- Physical forwards only. Power and gas are flow commodities; coal is a
+  cargo commodity (FOB, one cargo per trade — `docs/adr/0034`, `0037`).
+  No options.
 - Commodities are tenant-owned master data in Reference (unit, delivery
   model, quality spec — `docs/adr/0033-commodity-master-data.md`). Never
   hard-code a commodity list; one currency, EUR.
-- Monthly delivery periods only.
+- Monthly delivery periods for positions, curves and valuation. A cargo's
+  laycan dates sit inside its month (ADR-0032).
 - Mark-to-market: `(forward_price - trade_price) * volume`. No curve
   interpolation, shaping, or cascading — flat monthly points.
 - No VaR. Stress scenarios instead.

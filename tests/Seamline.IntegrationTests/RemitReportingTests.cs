@@ -38,6 +38,35 @@ public sealed class RemitReportingTests(SeamlineApiFactory factory) : IClassFixt
     }
 
     [Fact]
+    public async Task A_coal_cargo_trade_is_never_reported()
+    {
+        // Coal is not a REMIT product — electricity and natural gas only
+        // (ADR-0034) — so an Active cargo trade produces no report.
+        var tenantId = Guid.NewGuid();
+        var client = await AuthTestHelper.CreateAuthenticatedClientAsync(factory, tenantId, IdentityRoles.FrontOffice);
+
+        var counterparty = await CreateCounterpartyAsync(client, "Bulk Carriers", 100_000_000m);
+        var response = await client.PostAsJsonAsync("/trades/", new
+        {
+            commodityCode = "COAL",
+            deliveryPeriod = "2027-03",
+            direction = "Buy",
+            volume = 75_000m,
+            price = 110m,
+            counterpartyId = counterparty.Id,
+            cargoTerms = new { tolerancePct = 10m, laycanFrom = "2027-03-10", laycanTo = "2027-03-20" }
+        });
+        response.EnsureSuccessStatusCode();
+        var trade = (await response.Content.ReadFromJsonAsync<TradeIdDto>())!;
+        (await client.PostAsync($"/trades/{trade.Id}/submit", content: null)).EnsureSuccessStatusCode();
+
+        var provider = BuildReportingServiceProvider(new FakeRemitSubmissionClient());
+        await provider.RunReportingBatchAsync();
+
+        Assert.Empty(await FetchReportsAsync(trade.Id));
+    }
+
+    [Fact]
     public async Task Amending_an_active_trade_produces_a_New_then_a_Modify_report()
     {
         var tenantId = Guid.NewGuid();

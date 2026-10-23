@@ -26,7 +26,11 @@ internal sealed class TradeDeliveredConsumer(RiskDbContext db, TenantContext ten
         var position = await PositionLookup.FindAsync(db, message.CommodityCode, message.DeliveryPeriod, context.CancellationToken);
         if (position is not null)
         {
-            var signedVolume = message.Direction == TradeDirection.Buy ? message.Volume : -message.Volume;
+            // Close what activation opened: the contract quantity. For a cargo
+            // the loaded quantity may differ within the tolerance; that
+            // difference is physical fulfilment, not exposure (ADR-0034).
+            var contractVolume = message.ContractVolume ?? message.Volume;
+            var signedVolume = message.Direction == TradeDirection.Buy ? contractVolume : -contractVolume;
             position.Apply(-signedVolume, message.Price);
         }
         // No position is a data inconsistency elsewhere, not this consumer's problem.

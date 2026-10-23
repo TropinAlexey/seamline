@@ -233,11 +233,184 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                     b.ToTable("remit_report", "trading");
                 });
 
+            modelBuilder.Entity("Seamline.Modules.Trading.Internal.Shipment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AshPct")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("ash_pct");
+
+                    b.Property<DateOnly?>("BlDate")
+                        .HasColumnType("date")
+                        .HasColumnName("bl_date");
+
+                    b.Property<decimal?>("BlQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("bl_quantity");
+
+                    b.Property<DateOnly>("Eta")
+                        .HasColumnType("date")
+                        .HasColumnName("eta");
+
+                    b.Property<string>("Imo")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("imo");
+
+                    b.Property<DateTimeOffset>("LastChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_changed_at");
+
+                    b.Property<decimal?>("MeasuredNarKcalKg")
+                        .HasPrecision(7, 1)
+                        .HasColumnType("numeric(7,1)")
+                        .HasColumnName("measured_nar_kcal_kg");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("state");
+
+                    b.Property<decimal?>("SulphurPct")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("sulphur_pct");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TradeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trade_id");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<string>("VesselName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("vessel_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TradeId")
+                        .IsUnique();
+
+                    b.ToTable("shipment", "trading");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.Trading.Internal.ShipmentHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AshPct")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("ash_pct");
+
+                    b.Property<DateOnly?>("BlDate")
+                        .HasColumnType("date")
+                        .HasColumnName("bl_date");
+
+                    b.Property<decimal?>("BlQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("bl_quantity");
+
+                    b.Property<string>("ChangeReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("change_reason");
+
+                    b.Property<string>("ChangedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("changed_by");
+
+                    b.Property<DateOnly>("Eta")
+                        .HasColumnType("date")
+                        .HasColumnName("eta");
+
+                    b.Property<string>("Imo")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("imo");
+
+                    b.Property<decimal?>("MeasuredNarKcalKg")
+                        .HasPrecision(7, 1)
+                        .HasColumnType("numeric(7,1)")
+                        .HasColumnName("measured_nar_kcal_kg");
+
+                    b.Property<Guid>("ShipmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shipment_id");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("state");
+
+                    b.Property<decimal?>("SulphurPct")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("sulphur_pct");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TradeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trade_id");
+
+                    b.Property<DateTimeOffset>("ValidFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<string>("VesselName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("vessel_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShipmentId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("shipment_history", "trading");
+                });
+
             modelBuilder.Entity("Seamline.Modules.Trading.Internal.Trade", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<decimal?>("ActualVolume")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("actual_volume");
 
                     b.Property<string>("CommodityCode")
                         .IsRequired()
@@ -342,6 +515,11 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("ActualVolume")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("actual_volume");
+
                     b.Property<string>("ChangeReason")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -426,6 +604,57 @@ namespace Seamline.Modules.Trading.Internal.Migrations
                         .WithMany()
                         .HasForeignKey("InboxMessageId", "InboxConsumerId")
                         .HasPrincipalKey("MessageId", "ConsumerId");
+                });
+
+            modelBuilder.Entity("Seamline.Modules.Trading.Internal.Trade", b =>
+                {
+                    b.OwnsOne("Seamline.Modules.Trading.Internal.CargoTerms", "CargoTerms", b1 =>
+                        {
+                            b1.Property<Guid>("TradeId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<decimal>("BaseNarKcalKg")
+                                .HasPrecision(7, 1)
+                                .HasColumnType("numeric(7,1)")
+                                .HasColumnName("cargo_base_nar_kcal_kg");
+
+                            b1.Property<DateOnly>("LaycanFrom")
+                                .HasColumnType("date")
+                                .HasColumnName("cargo_laycan_from");
+
+                            b1.Property<DateOnly>("LaycanTo")
+                                .HasColumnType("date")
+                                .HasColumnName("cargo_laycan_to");
+
+                            b1.Property<decimal>("MaxAshPct")
+                                .HasPrecision(5, 2)
+                                .HasColumnType("numeric(5,2)")
+                                .HasColumnName("cargo_max_ash_pct");
+
+                            b1.Property<decimal>("MaxSulphurPct")
+                                .HasPrecision(5, 2)
+                                .HasColumnType("numeric(5,2)")
+                                .HasColumnName("cargo_max_sulphur_pct");
+
+                            b1.Property<decimal>("RejectBelowNarKcalKg")
+                                .HasPrecision(7, 1)
+                                .HasColumnType("numeric(7,1)")
+                                .HasColumnName("cargo_reject_below_nar_kcal_kg");
+
+                            b1.Property<decimal>("TolerancePct")
+                                .HasPrecision(5, 2)
+                                .HasColumnType("numeric(5,2)")
+                                .HasColumnName("cargo_tolerance_pct");
+
+                            b1.HasKey("TradeId");
+
+                            b1.ToTable("trade", "trading");
+
+                            b1.WithOwner()
+                                .HasForeignKey("TradeId");
+                        });
+
+                    b.Navigation("CargoTerms");
                 });
 #pragma warning restore 612, 618
         }

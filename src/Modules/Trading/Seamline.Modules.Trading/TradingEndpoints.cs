@@ -34,8 +34,26 @@ public static class TradingEndpoints
         {
             // Commodity codes are master data (ADR-0033): a typo would
             // otherwise open a position nothing can ever price.
-            if (await commodities.FindAsync(request.CommodityCode, ct) is null)
+            var commodity = await commodities.FindAsync(request.CommodityCode, ct);
+            if (commodity is null)
                 return Results.BadRequest(new ErrorResponse($"Commodity {request.CommodityCode} not found."));
+
+            // Cargo commodities need cargo terms, flow commodities must not
+            // have them (ADR-0034). The quality spec is snapshotted from
+            // master data at booking.
+            CargoTerms? cargoTerms = null;
+            if (commodity.DeliveryModel == DeliveryModel.Cargo)
+            {
+                if (request.CargoTerms is not { } terms)
+                    return Results.BadRequest(new ErrorResponse($"{commodity.Code} is a cargo commodity: tolerance and laycan are required."));
+                var spec = commodity.QualitySpec!;
+                cargoTerms = new CargoTerms(terms.TolerancePct, terms.LaycanFrom, terms.LaycanTo,
+                    spec.BaseNarKcalKg, spec.RejectBelowNarKcalKg, spec.MaxSulphurPct, spec.MaxAshPct);
+            }
+            else if (request.CargoTerms is not null)
+            {
+                return Results.BadRequest(new ErrorResponse($"{commodity.Code} is a flow commodity: cargo terms do not apply."));
+            }
 
             // Checked here, not left to the credit check at submit time: a
             // draft pointing at a counterparty that doesn't exist would
@@ -50,7 +68,8 @@ public static class TradingEndpoints
                 request.Direction,
                 request.Volume,
                 request.Price,
-                request.CounterpartyId);
+                request.CounterpartyId,
+                cargoTerms);
 
             db.Trades.Add(trade);
             var actor = ActorName(user);
@@ -274,10 +293,12 @@ public static class TradingEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
+        app.MapShipmentEndpoints();
+
         return app;
     }
 
-    private static string ActorName(ClaimsPrincipal user)
+    internal static string ActorName(ClaimsPrincipal user)
         => user.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
 }
 
@@ -287,7 +308,10 @@ internal sealed record CreateTradeRequest(
     TradeDirection Direction,
     decimal Volume,
     decimal Price,
-    Guid CounterpartyId);
+    Guid CounterpartyId,
+    CargoTermsRequest? CargoTerms = null);
+
+internal sealed record CargoTermsRequest(decimal TolerancePct, DateOnly LaycanFrom, DateOnly LaycanTo);
 
 internal sealed record AmendTradeRequest(decimal Volume, decimal Price, string Reason);
 
@@ -322,11 +346,13 @@ internal sealed record TradeSummary(
     Guid CounterpartyId,
     TradeState State,
     int Version,
-    DateTimeOffset LastChangedAt)
+    DateTimeOffset LastChangedAt,
+    decimal? ActualVolume,
+    CargoTermsRef? CargoTerms)
 {
     public static TradeSummary From(Trade t) => new(
         t.Id, t.CommodityCode, t.DeliveryPeriod, t.Direction, t.Volume, t.Price, t.Notional,
-        t.CounterpartyId, t.State, t.Version, t.LastChangedAt);
+        t.CounterpartyId, t.State, t.Version, t.LastChangedAt, t.ActualVolume, t.CargoTerms?.ToRef());
 }
 
 internal sealed record TradeHistoryEntry(
@@ -341,11 +367,12 @@ internal sealed record TradeHistoryEntry(
     decimal Volume,
     decimal Price,
     decimal Notional,
-    Guid CounterpartyId)
+    Guid CounterpartyId,
+    decimal? ActualVolume)
 {
     public static TradeHistoryEntry From(TradeHistory h) => new(
         h.Version, h.ValidFrom, h.ChangedBy, h.ChangeReason, h.State, h.CommodityCode, h.DeliveryPeriod,
-        h.Direction, h.Volume, h.Price, h.Volume * h.Price, h.CounterpartyId);
+        h.Direction, h.Volume, h.Price, h.Volume * h.Price, h.CounterpartyId, h.ActualVolume);
 }
 
 internal sealed record RemitReportEntry(int Version, RemitAction Action, string AckId, DateTimeOffset SubmittedAt);

@@ -135,6 +135,16 @@
         "tags": [
           "Settlement"
         ],
+        "parameters": [
+          {
+            "name": "tradeId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -887,6 +897,283 @@
         }
       }
     },
+    "/shipments": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ShipmentEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipments/{tradeId}": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "tradeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/shipments/{tradeId}/history": {
+      "get": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "tradeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ShipmentHistoryEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipments/{tradeId}/nominate": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "tradeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NominateVesselRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipments/{tradeId}/load": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "tradeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordLoadingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipments/{tradeId}/certify": {
+      "post": {
+        "tags": [
+          "Trading"
+        ],
+        "parameters": [
+          {
+            "name": "tradeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordCertificateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/curve-points": {
       "post": {
         "tags": [
@@ -1017,6 +1304,70 @@
           "total": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "CargoTermsRef": {
+        "required": [
+          "tolerancePct",
+          "laycanFrom",
+          "laycanTo",
+          "baseNarKcalKg",
+          "rejectBelowNarKcalKg",
+          "maxSulphurPct",
+          "maxAshPct"
+        ],
+        "type": "object",
+        "properties": {
+          "tolerancePct": {
+            "type": "number",
+            "format": "double"
+          },
+          "laycanFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "laycanTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "baseNarKcalKg": {
+            "type": "number",
+            "format": "double"
+          },
+          "rejectBelowNarKcalKg": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxSulphurPct": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxAshPct": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "CargoTermsRequest": {
+        "required": [
+          "tolerancePct",
+          "laycanFrom",
+          "laycanTo"
+        ],
+        "type": "object",
+        "properties": {
+          "tolerancePct": {
+            "type": "number",
+            "format": "double"
+          },
+          "laycanFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "laycanTo": {
+            "type": "string",
+            "format": "date"
           }
         }
       },
@@ -1178,6 +1529,16 @@
           "counterpartyId": {
             "type": "string",
             "format": "uuid"
+          },
+          "cargoTerms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CargoTermsRequest"
+              }
+            ]
           }
         }
       },
@@ -1234,7 +1595,11 @@
           "tradeId",
           "counterpartyId",
           "amount",
-          "issuedAt"
+          "issuedAt",
+          "kind",
+          "quantity",
+          "unitPrice",
+          "balance"
         ],
         "type": "object",
         "properties": {
@@ -1253,8 +1618,39 @@
           "issuedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/InvoiceKind"
+          },
+          "quantity": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "unitPrice": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "balance": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
+      },
+      "InvoiceKind": {
+        "enum": [
+          "Standard",
+          "Provisional",
+          "Final"
+        ]
       },
       "LoginRequest": {
         "required": [
@@ -1284,6 +1680,26 @@
         "properties": {
           "token": {
             "type": "string"
+          }
+        }
+      },
+      "NominateVesselRequest": {
+        "required": [
+          "vesselName",
+          "imo",
+          "eta"
+        ],
+        "type": "object",
+        "properties": {
+          "vesselName": {
+            "type": "string"
+          },
+          "imo": {
+            "type": "string"
+          },
+          "eta": {
+            "type": "string",
+            "format": "date"
           }
         }
       },
@@ -1377,6 +1793,45 @@
           }
         }
       },
+      "RecordCertificateRequest": {
+        "required": [
+          "measuredNarKcalKg",
+          "sulphurPct",
+          "ashPct"
+        ],
+        "type": "object",
+        "properties": {
+          "measuredNarKcalKg": {
+            "type": "number",
+            "format": "double"
+          },
+          "sulphurPct": {
+            "type": "number",
+            "format": "double"
+          },
+          "ashPct": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "RecordLoadingRequest": {
+        "required": [
+          "blQuantity",
+          "blDate"
+        ],
+        "type": "object",
+        "properties": {
+          "blQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "blDate": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
       "RemitAction": {
         "enum": [
           "New",
@@ -1434,6 +1889,162 @@
             "format": "double"
           }
         }
+      },
+      "ShipmentEntry": {
+        "required": [
+          "tradeId",
+          "commodityCode",
+          "deliveryPeriod",
+          "contractVolume",
+          "toleranceMin",
+          "toleranceMax",
+          "laycanFrom",
+          "laycanTo",
+          "state",
+          "vesselName",
+          "imo",
+          "eta",
+          "blQuantity",
+          "blDate",
+          "measuredNarKcalKg",
+          "sulphurPct",
+          "ashPct"
+        ],
+        "type": "object",
+        "properties": {
+          "tradeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "contractVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "toleranceMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "toleranceMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "laycanFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "laycanTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "state": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ShipmentState"
+              }
+            ]
+          },
+          "vesselName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "imo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "eta": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "blQuantity": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "blDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "measuredNarKcalKg": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "sulphurPct": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "ashPct": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "ShipmentHistoryEntry": {
+        "required": [
+          "version",
+          "validFrom",
+          "changedBy",
+          "changeReason",
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "changedBy": {
+            "type": "string"
+          },
+          "changeReason": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ShipmentState"
+          }
+        }
+      },
+      "ShipmentState": {
+        "enum": [
+          "Nominated",
+          "Loaded",
+          "QualityCertified",
+          "QualityRejected",
+          null
+        ]
       },
       "StressEntry": {
         "required": [
@@ -1585,7 +2196,8 @@
           "volume",
           "price",
           "notional",
-          "counterpartyId"
+          "counterpartyId",
+          "actualVolume"
         ],
         "type": "object",
         "properties": {
@@ -1630,6 +2242,13 @@
           "counterpartyId": {
             "type": "string",
             "format": "uuid"
+          },
+          "actualVolume": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -1711,7 +2330,9 @@
           "counterpartyId",
           "state",
           "version",
-          "lastChangedAt"
+          "lastChangedAt",
+          "actualVolume",
+          "cargoTerms"
         ],
         "type": "object",
         "properties": {
@@ -1754,6 +2375,23 @@
           "lastChangedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "actualVolume": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "cargoTerms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CargoTermsRef"
+              }
+            ]
           }
         }
       },

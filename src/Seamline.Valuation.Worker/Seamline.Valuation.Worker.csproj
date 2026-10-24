@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Modules\Risk\Seamline.Modules.Risk\Seamline.Modules.Risk.csproj" />
     <ProjectReference Include="..\Modules\MarketData\Seamline.Modules.MarketData\Seamline.Modules.MarketData.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\Seamline.Modules.Inventory\Seamline.Modules.Inventory.csproj" />
     <ProjectReference Include="..\Modules\Reference\Seamline.Modules.Reference\Seamline.Modules.Reference.csproj" />
   </ItemGroup>
 

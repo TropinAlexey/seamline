@@ -17,6 +17,7 @@ using Seamline.Modules.Trading.Internal;
 using Seamline.Modules.Reference.Internal;
 using Seamline.Modules.MarketData.Internal;
 using Seamline.Modules.Settlement.Internal;
+using Seamline.Modules.Inventory.Internal;
 using Seamline.Modules.Identity.Internal;
 using Seamline.Modules.Identity.Contracts;
 using OpenTelemetry.Resources;
@@ -135,6 +136,7 @@ builder.Services.AddRiskModule(builder.Configuration);
 builder.Services.AddAuditModule(builder.Configuration);
 builder.Services.AddMarketDataModule(builder.Configuration);
 builder.Services.AddSettlementModule(builder.Configuration);
+builder.Services.AddInventoryModule(builder.Configuration);
 builder.Services.AddIdentityModule(builder.Configuration);
 
 builder.Services.AddMassTransit(x =>
@@ -225,6 +227,7 @@ if (!isGeneratingOpenApiDocument)
         await app.Services.MigrateAuditModuleAsync();
         await app.Services.MigrateMarketDataModuleAsync();
         await app.Services.MigrateSettlementModuleAsync();
+        await app.Services.MigrateInventoryModuleAsync();
         await app.Services.MigrateIdentityModuleAsync();
     }
     catch (Exception ex)
@@ -327,6 +330,7 @@ app.MapTradingEndpoints();
 app.MapRiskEndpoints();
 app.MapMarketDataEndpoints();
 app.MapSettlementEndpoints();
+app.MapInventoryEndpoints();
 app.MapAuditEndpoints();
 
 app.Run();

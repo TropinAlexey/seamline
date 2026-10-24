@@ -57,6 +57,7 @@
     <ProjectReference Include="..\Modules\MarketData\Seamline.Modules.MarketData\Seamline.Modules.MarketData.csproj" />
     <ProjectReference Include="..\Modules\Risk\Seamline.Modules.Risk\Seamline.Modules.Risk.csproj" />
     <ProjectReference Include="..\Modules\Settlement\Seamline.Modules.Settlement\Seamline.Modules.Settlement.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\Seamline.Modules.Inventory\Seamline.Modules.Inventory.csproj" />
     <ProjectReference Include="..\Modules\Identity\Seamline.Modules.Identity\Seamline.Modules.Identity.csproj" />
     <ProjectReference Include="..\Modules\Audit\Seamline.Modules.Audit\Seamline.Modules.Audit.csproj" />
   </ItemGroup>

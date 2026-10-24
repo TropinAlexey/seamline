@@ -11,7 +11,7 @@ public class CloudPortabilityTests
 {
     private static readonly string[] ModuleNames =
     [
-        "Reference", "Trading", "MarketData", "Risk", "Settlement", "Identity", "Audit"
+        "Reference", "Trading", "MarketData", "Risk", "Settlement", "Inventory", "Identity", "Audit"
     ];
 
     private static readonly string[] CloudSdkPrefixes = ["AWSSDK", "Azure."];

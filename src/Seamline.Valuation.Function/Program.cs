@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Metrics;
+using Seamline.Modules.Inventory.Internal;
 using Seamline.Modules.MarketData.Internal;
 using Seamline.Modules.Reference.Internal;
 using Seamline.Modules.Risk.Internal;
@@ -30,11 +31,14 @@ builder.Services.AddScoped<TenantSessionVariableInterceptor>();
 builder.Services.AddReferenceModule(builder.Configuration);
 builder.Services.AddRiskModule(builder.Configuration);
 builder.Services.AddMarketDataModule(builder.Configuration);
+// Read side only: the EOD pass values gas in storage (ADR-0036).
+builder.Services.AddInventoryModule(builder.Configuration);
 
 var host = builder.Build();
 
 await host.Services.MigrateReferenceModuleAsync();
 await host.Services.MigrateRiskModuleAsync();
 await host.Services.MigrateMarketDataModuleAsync();
+await host.Services.MigrateInventoryModuleAsync();
 
 await host.RunAsync();

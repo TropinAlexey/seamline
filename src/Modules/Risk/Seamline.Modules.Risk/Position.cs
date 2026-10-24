@@ -40,30 +40,11 @@ internal sealed class Position : TenantOwnedEntity<Guid>
         };
     }
 
+    // The rule itself lives in SharedKernel (ADR-0036): Inventory's storage
+    // balance uses the same one.
     public void Apply(decimal signedVolume, decimal price)
     {
-        var newNetVolume = NetVolume + signedVolume;
-
-        if (newNetVolume == 0m)
-        {
-            WeightedAvgPrice = 0m;
-        }
-        else if (NetVolume == 0m || Math.Sign(newNetVolume) != Math.Sign(NetVolume))
-        {
-            // Opening from flat, or flipping through zero — the remainder
-            // is a fresh position, priced at this trade's price.
-            WeightedAvgPrice = price;
-        }
-        else if (Math.Abs(newNetVolume) > Math.Abs(NetVolume))
-        {
-            // Extending in the same direction — blend.
-            var oldAbs = Math.Abs(NetVolume);
-            var addedAbs = Math.Abs(signedVolume);
-            WeightedAvgPrice = (WeightedAvgPrice * oldAbs + price * addedAbs) / (oldAbs + addedAbs);
-        }
-        // else: reducing without flipping — cost basis of what's left is
-        // unchanged.
-
-        NetVolume = newNetVolume;
+        WeightedAvgPrice = WeightedAverageCost.After(NetVolume, WeightedAvgPrice, signedVolume, price);
+        NetVolume += signedVolume;
     }
 }

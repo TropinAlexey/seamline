@@ -99,6 +99,31 @@ public static class RiskEndpoints
         .WithTags("Risk")
         .Produces<ValuationRunResponse>();
 
+        // Gas in storage from the latest EOD run (ADR-0036). Every row of a
+        // run shares its RunId, so the newest row identifies the run.
+        app.MapGet("/inventory/valuations/latest", async (RiskDbContext db, CancellationToken ct) =>
+        {
+            var latest = await db.InventoryValuations.AsNoTracking()
+                .OrderByDescending(v => v.ValuedAt)
+                .Select(v => new { v.RunId, v.ValuedAt })
+                .FirstOrDefaultAsync(ct);
+            if (latest is null)
+                return Results.Ok(new InventoryValuationRunResponse(null, null, [], 0m));
+
+            var items = await db.InventoryValuations.AsNoTracking()
+                .Where(v => v.RunId == latest.RunId)
+                .OrderBy(v => v.Facility)
+                .Select(v => new InventoryValuationEntry(
+                    v.StorageContractId, v.Facility, v.CommodityCode, v.DeliveryPeriod, v.Quantity, v.Wacog,
+                    v.CurvePrice, v.CurvePublishedAt, v.UnrealizedAmount))
+                .ToListAsync(ct);
+
+            return Results.Ok(new InventoryValuationRunResponse(latest.RunId, latest.ValuedAt, items, items.Sum(i => i.UnrealizedAmount)));
+        })
+        .WithTags("Risk")
+        .RequireAuthorization(policy => policy.RequireRole(IdentityRoles.MiddleOffice, IdentityRoles.BackOffice))
+        .Produces<InventoryValuationRunResponse>();
+
         app.MapGet("/stress-results/latest", async (RiskDbContext db, CancellationToken ct) =>
         {
             var latest = await db.StressScenarioResults.AsNoTracking()
@@ -201,6 +226,20 @@ internal sealed record ValuationEntry(
     Guid? TradeId);
 
 internal sealed record ValuationRunResponse(Guid? RunId, DateTimeOffset? RunAt, IReadOnlyList<ValuationEntry> Items, decimal TotalMtm);
+
+internal sealed record InventoryValuationEntry(
+    Guid StorageContractId,
+    string Facility,
+    string CommodityCode,
+    string DeliveryPeriod,
+    decimal Quantity,
+    decimal Wacog,
+    decimal CurvePrice,
+    DateTimeOffset CurvePublishedAt,
+    decimal UnrealizedAmount);
+
+internal sealed record InventoryValuationRunResponse(
+    Guid? RunId, DateTimeOffset? RunAt, IReadOnlyList<InventoryValuationEntry> Items, decimal TotalUnrealized);
 
 // TradeId is set on an index-priced trade's row (valued per trade,
 // ADR-0035) and null on a position's row.

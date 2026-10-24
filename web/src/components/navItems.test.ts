@@ -9,6 +9,7 @@ describe("navigation role gating", () => {
     expect(visibleTo("FO")).toEqual([
       "/trades",
       "/shipments",
+      "/storage",
       "/positions",
       "/curves",
       "/counterparties",
@@ -18,6 +19,7 @@ describe("navigation role gating", () => {
       "/trades",
       "/approvals",
       "/shipments",
+      "/storage",
       "/positions",
       "/stress",
       "/curves",
@@ -28,6 +30,7 @@ describe("navigation role gating", () => {
     expect(visibleTo("BO")).toEqual([
       "/trades",
       "/shipments",
+      "/storage",
       "/positions",
       "/stress",
       "/curves",

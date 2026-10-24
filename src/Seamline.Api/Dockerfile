@@ -9,6 +9,8 @@ COPY src/Modules/Trading/Seamline.Modules.Trading/*.csproj src/Modules/Trading/S
 COPY src/Modules/Trading/Seamline.Modules.Trading.Contracts/*.csproj src/Modules/Trading/Seamline.Modules.Trading.Contracts/
 COPY src/Modules/MarketData/Seamline.Modules.MarketData/*.csproj src/Modules/MarketData/Seamline.Modules.MarketData/
 COPY src/Modules/MarketData/Seamline.Modules.MarketData.Contracts/*.csproj src/Modules/MarketData/Seamline.Modules.MarketData.Contracts/
+COPY src/Modules/Inventory/Seamline.Modules.Inventory/*.csproj src/Modules/Inventory/Seamline.Modules.Inventory/
+COPY src/Modules/Inventory/Seamline.Modules.Inventory.Contracts/*.csproj src/Modules/Inventory/Seamline.Modules.Inventory.Contracts/
 COPY src/Modules/Risk/Seamline.Modules.Risk/*.csproj src/Modules/Risk/Seamline.Modules.Risk/
 COPY src/Modules/Risk/Seamline.Modules.Risk.Contracts/*.csproj src/Modules/Risk/Seamline.Modules.Risk.Contracts/
 COPY src/Modules/Settlement/Seamline.Modules.Settlement/*.csproj src/Modules/Settlement/Seamline.Modules.Settlement/

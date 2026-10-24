@@ -80,6 +80,7 @@ export async function api(tenant: TenantKey, user: DemoUser) {
     async fixing(indexCode: string, fixingDate: string, value: number) {
       return post(`indices/${indexCode}/fixings`, { fixingDate, value });
     },
+    post,
     async get<T>(path: string): Promise<T> {
       const response = await context.get(path);
       if (!response.ok()) throw new Error(`GET ${path} → ${response.status()}`);

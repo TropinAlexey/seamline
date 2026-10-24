@@ -14,6 +14,7 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
     public DbSet<ValuationSnapshot> ValuationSnapshots => Set<ValuationSnapshot>();
     public DbSet<StressScenarioResult> StressScenarioResults => Set<StressScenarioResult>();
     public DbSet<FormulaTrade> FormulaTrades => Set<FormulaTrade>();
+    public DbSet<InventoryValuation> InventoryValuations => Set<InventoryValuation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -123,6 +124,30 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
 
             builder.HasIndex(f => f.TradeId).IsUnique();
             builder.HasQueryFilter(f => f.TenantId == tenantContext.TenantId);
+        });
+
+        // Append-only (ADR-0006), one row per storage contract per EOD run.
+        modelBuilder.Entity<InventoryValuation>(builder =>
+        {
+            builder.ToTable("inventory_valuation");
+            builder.HasKey(v => v.Id);
+            builder.Property(v => v.TenantId)
+                .HasConversion(t => t.Value, v => new TenantId(v))
+                .HasColumnName("tenant_id");
+            builder.Property(v => v.StorageContractId).HasColumnName("storage_contract_id");
+            builder.Property(v => v.Facility).HasColumnName("facility").HasMaxLength(200).IsRequired();
+            builder.Property(v => v.CommodityCode).HasColumnName("commodity_code").HasMaxLength(20).IsRequired();
+            builder.Property(v => v.DeliveryPeriod).HasColumnName("delivery_period").HasMaxLength(7).IsRequired();
+            builder.Property(v => v.Quantity).HasColumnName("quantity").HasPrecision(18, 3);
+            builder.Property(v => v.Wacog).HasColumnName("wacog").HasPrecision(18, 4);
+            builder.Property(v => v.CurvePrice).HasColumnName("curve_price").HasPrecision(18, 4);
+            builder.Property(v => v.CurvePublishedAt).HasColumnName("curve_published_at");
+            builder.Property(v => v.UnrealizedAmount).HasColumnName("unrealized_amount").HasPrecision(18, 2);
+            builder.Property(v => v.RunId).HasColumnName("run_id");
+            builder.Property(v => v.ValuedAt).HasColumnName("valued_at");
+
+            builder.HasIndex(v => new { v.TenantId, v.RunId });
+            builder.HasQueryFilter(v => v.TenantId == tenantContext.TenantId);
         });
     }
 

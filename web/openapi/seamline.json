@@ -97,6 +97,25 @@
         }
       }
     },
+    "/inventory/valuations/latest": {
+      "get": {
+        "tags": [
+          "Risk"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryValuationRunResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stress-results/latest": {
       "get": {
         "tags": [
@@ -1453,6 +1472,224 @@
           }
         }
       }
+    },
+    "/storage-contracts": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StorageContractEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterStorageContractRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageContractEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storage-contracts/{id}/movements": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InventoryMovementEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storage-contracts/{id}/injections": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InjectGasRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageContractEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/storage-contracts/{id}/withdrawals": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WithdrawGasRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageContractEntry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1912,6 +2149,193 @@
           }
         }
       },
+      "InjectGasRequest": {
+        "required": [
+          "gasDay",
+          "quantity",
+          "unitCost"
+        ],
+        "type": "object",
+        "properties": {
+          "gasDay": {
+            "type": "string",
+            "format": "date"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "unitCost": {
+            "type": "number",
+            "format": "double"
+          },
+          "tradeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "InventoryMovementEntry": {
+        "required": [
+          "version",
+          "gasDay",
+          "kind",
+          "quantity",
+          "unitCost",
+          "tradeId",
+          "quantityAfter",
+          "wacogAfter",
+          "actor",
+          "reason",
+          "recordedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gasDay": {
+            "type": "string",
+            "format": "date"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/InventoryMovementKind"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "unitCost": {
+            "type": "number",
+            "format": "double"
+          },
+          "tradeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "quantityAfter": {
+            "type": "number",
+            "format": "double"
+          },
+          "wacogAfter": {
+            "type": "number",
+            "format": "double"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "InventoryMovementKind": {
+        "enum": [
+          "Injection",
+          "Withdrawal"
+        ]
+      },
+      "InventoryValuationEntry": {
+        "required": [
+          "storageContractId",
+          "facility",
+          "commodityCode",
+          "deliveryPeriod",
+          "quantity",
+          "wacog",
+          "curvePrice",
+          "curvePublishedAt",
+          "unrealizedAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "storageContractId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "facility": {
+            "type": "string"
+          },
+          "commodityCode": {
+            "type": "string"
+          },
+          "deliveryPeriod": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "wacog": {
+            "type": "number",
+            "format": "double"
+          },
+          "curvePrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "curvePublishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "unrealizedAmount": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "InventoryValuationRunResponse": {
+        "required": [
+          "runId",
+          "runAt",
+          "items",
+          "totalUnrealized"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "runAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryValuationEntry"
+            }
+          },
+          "totalUnrealized": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "InvoiceEntry": {
         "required": [
           "tradeId",
@@ -2293,6 +2717,46 @@
           }
         }
       },
+      "RegisterStorageContractRequest": {
+        "required": [
+          "facility",
+          "commodityCode",
+          "capacity",
+          "maxInjectionPerDay",
+          "maxWithdrawalPerDay",
+          "validFrom",
+          "validTo"
+        ],
+        "type": "object",
+        "properties": {
+          "facility": {
+            "type": "string"
+          },
+          "commodityCode": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxInjectionPerDay": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxWithdrawalPerDay": {
+            "type": "number",
+            "format": "double"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "validTo": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
       "RemitAction": {
         "enum": [
           "New",
@@ -2506,6 +2970,76 @@
           "QualityRejected",
           null
         ]
+      },
+      "StorageContractEntry": {
+        "required": [
+          "id",
+          "facility",
+          "commodityCode",
+          "capacity",
+          "maxInjectionPerDay",
+          "maxWithdrawalPerDay",
+          "validFrom",
+          "validTo",
+          "quantity",
+          "wacog",
+          "fillPct",
+          "stockCost",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "facility": {
+            "type": "string"
+          },
+          "commodityCode": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxInjectionPerDay": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxWithdrawalPerDay": {
+            "type": "number",
+            "format": "double"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "validTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "wacog": {
+            "type": "number",
+            "format": "double"
+          },
+          "fillPct": {
+            "type": "number",
+            "format": "double"
+          },
+          "stockCost": {
+            "type": "number",
+            "format": "double"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "StressEntry": {
         "required": [
@@ -3064,6 +3598,36 @@
             "format": "double"
           }
         }
+      },
+      "WithdrawGasRequest": {
+        "required": [
+          "gasDay",
+          "quantity"
+        ],
+        "type": "object",
+        "properties": {
+          "gasDay": {
+            "type": "string",
+            "format": "date"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "tradeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
       }
     }
   },
@@ -3088,6 +3652,9 @@
     },
     {
       "name": "MarketData"
+    },
+    {
+      "name": "Inventory"
     }
   ]
 }

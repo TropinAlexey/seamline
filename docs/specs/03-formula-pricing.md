@@ -205,7 +205,11 @@ Fixing corrections, holiday calendars, other averaging methods (monthly
 average of weekly prices, lagged or trigger pricing, pricing on the B/L
 date), currency conversion, index-priced GAS and its REMIT fields, basis
 risk between the index and the delivery curve (`F` is assumed to be the
-same market).
+same market), a market clock: a fixing may be published for any weekday, a
+future one included, because the demo books trades in future months.
+Publication is middle office only, append-only and records who published.
+A zero or negative formula price (a premium deeper than the index) is
+refused at submit, loading and fixing.
 
 ## Public sources
 

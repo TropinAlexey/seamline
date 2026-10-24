@@ -9,23 +9,24 @@ Multi-tenant mini-CTRM (power/gas forwards) на .NET 10 — модульный 
 (Valuation, Reporting). Postgres (схема на модуль + RLS), MassTransit 8.5.10
 (InMemory локально/тесты, RabbitMQ dev, ServiceBus в Azure), Hangfire для EOD.
 Тонкий web UI (React 19 + Mantine, `web/`) за same-origin прокси `/api`.
-Честно: ETRM-ядро + уголь-карго с фиксированной или формульной ценой;
-хранилище газа пока только специфицировано — `docs/ctrm-gap-analysis.md`.
+Честно: ETRM-ядро + уголь-карго с фиксированной или формульной ценой +
+хранилище газа (WACOG) — все CTRM-процессы из `docs/ctrm-gap-analysis.md`
+реализованы.
 4 таргета деплоя: docker compose, k3d+Helm, AWS ECS (Terraform), Azure CA (Bicep).
 
 ## Текущий статус (2026-10-23, ветка `main`)
 - **Фазы 1–5 завершены, Фаза 6 (Web UI) — Phase A и B закоммичены.** Phase C
   (SignalR) и D (облачный деплой web) — вне скоупа, пока не попросят.
-- **Фаза 7 (CTRM):** ADR-0032…0038, `docs/specs/00–03`, gap analysis.
-  Шаги 1 (справочник товаров), 2 (уголь-карго, ADR-0034 + 0037) и 3
-  (формульная цена, ADR-0035 + 0038) реализованы; 4 (хранилище газа)
-  специфицирован. 39 ADR.
-- Тесты: 313 .NET (149 unit + 69 arch + 95 integration) + web 29 unit (Vitest)
-  + 14 E2E (Playwright против compose).
+- **Фаза 7 (CTRM) завершена:** ADR-0032…0040, `docs/specs/00–03`, gap
+  analysis. Шаги: 1 справочник товаров, 2 уголь-карго (ADR-0034 + 0037),
+  3 формульная цена (ADR-0035 + 0038), 4 хранилище газа (ADR-0036 + 0040).
+  40 ADR.
+- Тесты: 341 .NET (159 unit + 78 arch + 104 integration) + web 29 unit
+  (Vitest) + 15 E2E (Playwright против compose).
 - CI — 4 job-ы, все зелёные: `build-and-test`, `api-contract` (OpenAPI не
   устарел), `web` (lint/format/typecheck/unit/build, TS-клиент == OpenAPI),
   `e2e` (compose с нуля + seed + Playwright, только push в main).
-- Последний коммит — Фаза 7, шаг 3 (формульная цена) + ADR-0039 (тесты ждут консьюмера).
+- Последний коммит — Фаза 7, шаг 4 (хранилище газа, ADR-0040). Фаза 7 завершена.
 
 ## Что сделано последним (хронология)
 1. `d37719a` — бэкенд под UI: read-эндпоинты (blotter, history, exposure,
@@ -69,12 +70,18 @@ Multi-tenant mini-CTRM (power/gas forwards) на .NET 10 — модульный 
     FO/MO; notional от неокруглённой цены; дубли выбора цены и округления
     в Risk; тип `CargoCertificate`; `formulaFinalPrice`/`confirmedPrice`;
     проект `Seamline.Modules.Settlement.Tests`.
+12. Фаза 7, шаг 4: хранилище газа. Модуль Inventory (договор с остатком +
+    append-only журнал движений, блокировка строки договора), правило WACOG
+    вынесено из `Position` в SharedKernel (`WeightedAverageCost`), Risk
+    оценивает запас в EOD (`inventory_valuation`, `/inventory/valuations/latest`),
+    страница Storage, сид с примером spec 02. ADR-0040: событий нет (outbox
+    только у Trading), WACOG хранится с 12 знаками — округление до 4 на
+    каждом движении дрейфовало (29.0002 вместо 29.0000 после 30 закачек).
 
 ## Что дальше (приоритет сверху вниз)
-1. [ ] Фаза 7, шаг 4: хранилище газа (spec 02, ADR-0036). Сначала сверить
-       ADR-0036 с уроком ADR-0037/0038: откуда публикуются события (outbox
-       только у Trading). После шага — перенести строку в README из «specified» в
-       «implemented», обновить gap analysis и CLAUDE.md Scope boundaries.
+1. [ ] Фаза 7 завершена. Дальше — по решению пользователя: бэклог ниже;
+       outbox на модуль — общий revisit-триггер ADR-0037/0038/0040. Новый
+       процесс — сначала spec + ADR, потом код.
 2. [ ] Утренняя проверка: `dotnet build SeamlineCtrm.sln && dotnet test SeamlineCtrm.sln`,
        `gh run list --limit 3` — последний push зелёный.
 3. [ ] Осознанно оставлено: amend-consumer двигает резервацию без advisory lock
@@ -97,11 +104,11 @@ dotnet test SeamlineCtrm.sln
 docker compose up -d && dotnet run tools/seed/seed.cs   # UI на http://localhost:8081
 cd web && npm run e2e                                   # Playwright против стека
 ```
-Демо: тур по UI (9 шагов) и 5 curl-ов — в README («Web UI», «Quick demo»).
+Демо: тур по UI (10 шагов) и 5 curl-ов — в README («Web UI», «Quick demo»).
 
 ## Где что лежит
 - Правила модулей: `CLAUDE.md` (обязательно к соблюдению, проверяется ArchTests в CI).
-- Решения: `docs/adr/` (39 шт), спеки CTRM — `docs/specs/`. Начать с 0001 (монолит), 0008 (saga),
+- Решения: `docs/adr/` (40 шт), спеки CTRM — `docs/specs/`. Начать с 0001 (монолит), 0008 (saga),
   0005 (multi-tenancy), 0030 (web UI).
 - Ежедневные логи: `.remember/today-*.done.md`, сводка — `.remember/recent.md`.
 - API: `src/Seamline.Api`, модули: `src/Modules/`, воркеры: `src/Seamline.*.Worker/`.

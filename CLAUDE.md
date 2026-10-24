@@ -82,6 +82,10 @@ README.
   are append-only; the expected price is computed only in Risk
   (`IFormulaPricingService`); back office confirms the final price. Power
   and gas stay fixed-price (REMIT).
+- Gas storage is an Inventory module (`docs/adr/0036`, `0040`): an
+  append-only movement ledger, the balance at WACOG (the shared
+  `WeightedAverageCost` rule, stored to 12 dp), valued by Risk in the EOD
+  run. Inventory publishes no events; Risk reads `IInventoryDirectory`.
 - Mark-to-market: `(forward_price - trade_price) * volume`. No curve
   interpolation, shaping, or cascading — flat monthly points.
 - No VaR. Stress scenarios instead.
@@ -89,11 +93,10 @@ README.
   implementation. State this in README.
 
 These boundaries describe what is implemented. The CTRM extension (coal
-cargo, formula pricing, gas storage) is specified in
-`docs/adr/0032-ctrm-scope.md` and `docs/specs/`; a boundary line here
-changes only when the step that needs it is implemented, and README must
-not claim a specified process as implemented (`docs/ctrm-gap-analysis.md`,
-"Wording rules").
+cargo, formula pricing, gas storage, `docs/adr/0032-ctrm-scope.md`,
+`docs/specs/`) is implemented in full. Anything new is specified first, and
+README must not claim a specified process as implemented
+(`docs/ctrm-gap-analysis.md`, "Wording rules").
 
 Work within the existing ADRs. When a change genuinely has to break one,
 write a new ADR that links it, says what is amended and why, and add a

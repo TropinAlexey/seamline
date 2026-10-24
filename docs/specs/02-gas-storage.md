@@ -1,6 +1,8 @@
 # Spec 02 — Gas storage: inventory and WACOG
 
-Status: **specified** ([ADR-0036](../adr/0036-gas-storage-inventory.md)).
+Status: **implemented** ([ADR-0036](../adr/0036-gas-storage-inventory.md), amended by
+[ADR-0040](../adr/0040-inventory-publishes-no-events.md): no integration events; WACOG
+kept to 12 dp).
 Depends on [spec 00](00-commodity-master-data.md).
 
 ## Problem
@@ -28,7 +30,7 @@ thing (after logistics and quality) a CTRM has and an ETRM usually doesn't.
 | Field | Type | Example |
 |---|---|---|
 | `facility` | text | "Demo Storage North" |
-| `commodity_code` | text, a `Flow` commodity in MWh | GAS |
+| `commodity_code` | text, a `Flow` commodity in MWh (checked against master data) | GAS |
 | `capacity` | numeric(18,3) MWh | 100,000.000 |
 | `max_injection_per_day` | numeric(18,3) MWh | 2,000.000 |
 | `max_withdrawal_per_day` | numeric(18,3) MWh | 3,000.000 |
@@ -44,12 +46,15 @@ ADR-0006):
 | `quantity` | numeric(18,3) MWh, > 0 |
 | `unit_cost` | numeric(18,4) EUR/MWh. Injections: the price paid for the gas. Withdrawals: the WACOG at that moment, recorded by the system |
 | `trade_id` | optional, the delivered trade the gas came from or went to |
+| `quantity_after`, `wacog_after` | the balance the movement produced (WACOG at 4 dp) |
 | `actor`, `reason`, `recorded_at` | as everywhere |
 
-`inventory.inventory_balance`, current state, one row per contract:
-`quantity`, `wacog` (numeric(18,4)), `version`. It is derived from the
-movements in the same transaction, the same split as `trade` and
-`trade_history`.
+The balance is current state on the contract row: `quantity`, `wacog`
+(numeric(28,12)) and `version`. It changes only together with a movement,
+in the same transaction — the same split as `trade` and `trade_history`.
+A separate balance table would hold one row per contract and add a join,
+nothing else. Movements on one contract are serialized by a row lock on it,
+so two at the same moment cannot both pass the daily rate (ADR-0040).
 
 ## Rules
 
@@ -66,9 +71,11 @@ movements in the same transaction, the same split as `trade` and
    This is exactly the rule `Position.Apply` already uses for a long
    position (ADR-0014). The calculation moves into SharedKernel so both
    use one implementation.
-5. Rounding (ADR-0007):
-   - `wacog` is rounded to 4 dp, `ToEven`, once per movement, when it is
-     stored;
+5. Rounding (ADR-0007, ADR-0040):
+   - `wacog` is stored to 12 dp, `ToEven`, once per movement, and shown to
+     4 dp everywhere it leaves the aggregate. Rounding to 4 dp on every
+     movement drifted: 30 daily injections ended at 29.0002 instead of the
+     worked example's 29.0000;
    - the withdrawal cost `quantity × wacog` is rounded to 2 dp when shown.
 6. **Valuation.** The EOD run (Risk) values stock against the GAS curve
    point for the valuation month:
@@ -102,12 +109,13 @@ delivered, the position closes (ADR-0014). If BO then injects that gas,
 quoting the trade id, it appears in inventory. The two are shown side by
 side and never summed: Positions page "Live" tab, and a new "Storage" tab.
 
-## Integration events (`Inventory.Contracts`)
+## Integration events
 
-`GasInjected` and `GasWithdrawn`, each with
-`(StorageContractId, GasDay, Quantity, UnitCost, WacogAfter, TradeId?,
-Actor, Reason)`. They go to Audit. Risk reads balances through
-`IInventoryDirectory` (a synchronous query interface) during the EOD pass,
+None (ADR-0040). An Inventory endpoint cannot publish through the bus
+outbox, which is bound to Trading's DbContext (ADR-0004, ADR-0037). The
+append-only ledger, with actor, reason and the resulting balance, is the
+audit record of storage. Risk reads balances through `IInventoryDirectory`
+(`Inventory.Contracts`, a synchronous query interface) during the EOD pass,
 the same pattern as `ICurvePointDirectory`.
 
 ## API and UI
@@ -118,7 +126,9 @@ the same pattern as `ICurvePointDirectory`.
 - `GET /inventory/valuations/latest` (MO, BO).
 - UI:
   - a **Storage** page: one card per contract with a fill gauge (stock vs
-    capacity), WACOG and unrealized P&L, plus the movement ledger;
+    capacity), WACOG, cost of stock and the last EOD's unrealized P&L,
+    plus the movement ledger. It is a page of its own rather than a tab on
+    Positions: stock and positions are shown side by side, never summed;
   - the BO forms enforce nothing the server doesn't.
 
 ## Tests
@@ -131,7 +141,8 @@ the same pattern as `ICurvePointDirectory`.
     for `Position` (regression).
 - **Integration:**
   - movements produce the balance in the same transaction;
-  - append-only grants on `inventory_movement`;
+  - append-only grants on `inventory_movement` and `inventory_valuation`;
+  - two injections on one gas day at the same moment: one passes, one 409;
   - RLS;
   - roles;
   - EOD writes `inventory_valuation` with the run id;

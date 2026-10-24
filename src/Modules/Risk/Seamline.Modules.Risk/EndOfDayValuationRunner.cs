@@ -2,6 +2,7 @@ using Seamline.SharedKernel;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Seamline.Modules.Inventory.Contracts;
 using Seamline.Modules.MarketData.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,7 +32,7 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        var tenantIds = await DiscoverTenantIdsWithOpenExposureAsync(cancellationToken);
+        var tenantIds = await DiscoverTenantIdsToValueAsync(cancellationToken);
         var run = EodRun.Start();
         logger.LogInformation("Valuation run {RunId} starting for {TenantCount} tenant(s) with open positions.", run.RunId, tenantIds.Count);
 
@@ -77,6 +78,7 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
         }
 
         await ValueFormulaTradesAsync(scope.ServiceProvider, db, run, tenantId, cancellationToken);
+        await ValueStockAsync(scope.ServiceProvider, db, run, tenantId, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -115,6 +117,32 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
         }
     }
 
+    // Gas in storage (ADR-0036): stock × (curve − WACOG) against the curve
+    // point of the run's own month. Skipped and logged without one, like a
+    // position.
+    private async Task ValueStockAsync(
+        IServiceProvider scopedServices, RiskDbContext db, EodRun run, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var inventory = scopedServices.GetRequiredService<IInventoryDirectory>();
+        var curveDirectory = scopedServices.GetRequiredService<ICurvePointDirectory>();
+        var period = $"{run.ValuedAt:yyyy-MM}";
+
+        foreach (var stock in await inventory.ListStockAsync(cancellationToken))
+        {
+            var curvePoint = await curveDirectory.FindAsync(stock.CommodityCode, period, cancellationToken);
+            if (curvePoint is null)
+            {
+                logger.LogWarning(
+                    "No curve point published for {Commodity}/{Period} (tenant {TenantId}) — skipping storage {Facility} for this run.",
+                    stock.CommodityCode, period, tenantId, stock.Facility);
+                continue;
+            }
+
+            db.InventoryValuations.Add(InventoryValuation.Create(
+                new TenantId(tenantId), stock, period, curvePoint.Price, curvePoint.PublishedAt, run));
+        }
+    }
+
     // No tenant registry exists anywhere in this project — multi-tenancy is
     // shared-schema + tenant_id, not a central Tenant table (ADR-0005). The
     // owner connection is the only way to discover which tenants have open
@@ -122,7 +150,7 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
     // read. Every per-tenant read/write after this still goes through the
     // restricted seamline_app connection with RLS and the query filter both
     // active, same as everywhere else in the app.
-    private async Task<List<Guid>> DiscoverTenantIdsWithOpenExposureAsync(CancellationToken cancellationToken)
+    private async Task<List<Guid>> DiscoverTenantIdsToValueAsync(CancellationToken cancellationToken)
     {
         var configuration = services.GetRequiredService<IConfiguration>();
         var optionsBuilder = new DbContextOptionsBuilder<RiskDbContext>()
@@ -139,6 +167,9 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
             .Select(f => f.TenantId.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
-        return withPositions.Union(withFormulaTrades).ToList();
+        using var inventoryScope = services.CreateScope();
+        var withStock = await inventoryScope.ServiceProvider
+            .GetRequiredService<IInventoryDirectory>().TenantsWithStockAsync(cancellationToken);
+        return withPositions.Union(withFormulaTrades).Union(withStock).ToList();
     }
 }

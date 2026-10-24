@@ -162,6 +162,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/inventory/valuations/latest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["InventoryValuationRunResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/stress-results/latest": {
     parameters: {
       query?: never;
@@ -1710,6 +1745,242 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/storage-contracts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["StorageContractEntry"][];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RegisterStorageContractRequest"];
+        };
+      };
+      responses: {
+        /** @description Created */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["StorageContractEntry"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/storage-contracts/{id}/movements": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["InventoryMovementEntry"][];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/storage-contracts/{id}/injections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["InjectGasRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["StorageContractEntry"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/storage-contracts/{id}/withdrawals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["WithdrawGasRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["StorageContractEntry"];
+          };
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["ErrorResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1851,6 +2122,66 @@ export interface components {
       /** Format: double */
       premium: number;
     };
+    InjectGasRequest: {
+      /** Format: date */
+      gasDay: string;
+      /** Format: double */
+      quantity: number;
+      /** Format: double */
+      unitCost: number;
+      /** Format: uuid */
+      tradeId?: null | string;
+      reason?: null | string;
+    };
+    InventoryMovementEntry: {
+      /** Format: int32 */
+      version: number;
+      /** Format: date */
+      gasDay: string;
+      kind: components["schemas"]["InventoryMovementKind"];
+      /** Format: double */
+      quantity: number;
+      /** Format: double */
+      unitCost: number;
+      /** Format: uuid */
+      tradeId: null | string;
+      /** Format: double */
+      quantityAfter: number;
+      /** Format: double */
+      wacogAfter: number;
+      actor: string;
+      reason: string;
+      /** Format: date-time */
+      recordedAt: string;
+    };
+    /** @enum {unknown} */
+    InventoryMovementKind: "Injection" | "Withdrawal";
+    InventoryValuationEntry: {
+      /** Format: uuid */
+      storageContractId: string;
+      facility: string;
+      commodityCode: string;
+      deliveryPeriod: string;
+      /** Format: double */
+      quantity: number;
+      /** Format: double */
+      wacog: number;
+      /** Format: double */
+      curvePrice: number;
+      /** Format: date-time */
+      curvePublishedAt: string;
+      /** Format: double */
+      unrealizedAmount: number;
+    };
+    InventoryValuationRunResponse: {
+      /** Format: uuid */
+      runId: null | string;
+      /** Format: date-time */
+      runAt: null | string;
+      items: components["schemas"]["InventoryValuationEntry"][];
+      /** Format: double */
+      totalUnrealized: number;
+    };
     InvoiceEntry: {
       /** Format: uuid */
       tradeId: string;
@@ -1967,6 +2298,20 @@ export interface components {
       /** Format: date */
       blDate: string;
     };
+    RegisterStorageContractRequest: {
+      facility: string;
+      commodityCode: string;
+      /** Format: double */
+      capacity: number;
+      /** Format: double */
+      maxInjectionPerDay: number;
+      /** Format: double */
+      maxWithdrawalPerDay: number;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+    };
     /** @enum {unknown} */
     RemitAction: "New" | "Modify" | "Terminate";
     RemitReportEntry: {
@@ -2027,6 +2372,32 @@ export interface components {
     };
     /** @enum {unknown} */
     ShipmentState: "Nominated" | "Loaded" | "QualityCertified" | "QualityRejected" | null;
+    StorageContractEntry: {
+      /** Format: uuid */
+      id: string;
+      facility: string;
+      commodityCode: string;
+      /** Format: double */
+      capacity: number;
+      /** Format: double */
+      maxInjectionPerDay: number;
+      /** Format: double */
+      maxWithdrawalPerDay: number;
+      /** Format: date */
+      validFrom: string;
+      /** Format: date */
+      validTo: string;
+      /** Format: double */
+      quantity: number;
+      /** Format: double */
+      wacog: number;
+      /** Format: double */
+      fillPct: number;
+      /** Format: double */
+      stockCost: number;
+      /** Format: int32 */
+      version: number;
+    };
     StressEntry: {
       commodityCode: string;
       deliveryPeriod: string;
@@ -2189,6 +2560,15 @@ export interface components {
       items: components["schemas"]["ValuationEntry"][];
       /** Format: double */
       totalMtm: number;
+    };
+    WithdrawGasRequest: {
+      /** Format: date */
+      gasDay: string;
+      /** Format: double */
+      quantity: number;
+      /** Format: uuid */
+      tradeId?: null | string;
+      reason?: null | string;
     };
   };
   responses: never;

@@ -46,6 +46,8 @@
     <ProjectReference Include="..\..\src\Modules\Risk\Seamline.Modules.Risk.Contracts\Seamline.Modules.Risk.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Modules\Settlement\Seamline.Modules.Settlement\Seamline.Modules.Settlement.csproj" />
     <ProjectReference Include="..\..\src\Modules\Settlement\Seamline.Modules.Settlement.Contracts\Seamline.Modules.Settlement.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Inventory\Seamline.Modules.Inventory\Seamline.Modules.Inventory.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Inventory\Seamline.Modules.Inventory.Contracts\Seamline.Modules.Inventory.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Modules\Identity\Seamline.Modules.Identity\Seamline.Modules.Identity.csproj" />
     <ProjectReference Include="..\..\src\Modules\Identity\Seamline.Modules.Identity.Contracts\Seamline.Modules.Identity.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Modules\Audit\Seamline.Modules.Audit\Seamline.Modules.Audit.csproj" />

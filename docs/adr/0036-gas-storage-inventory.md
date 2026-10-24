@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Specified, not yet implemented ([spec 02](../specs/02-gas-storage.md)).
+Accepted. Implemented ([spec 02](../specs/02-gas-storage.md)).
+**Amended in part by:** [ADR-0040](0040-inventory-publishes-no-events.md) (WACOG stored to 12 dp, shown to 4 dp; Inventory publishes no events).
 
 ## Context
 

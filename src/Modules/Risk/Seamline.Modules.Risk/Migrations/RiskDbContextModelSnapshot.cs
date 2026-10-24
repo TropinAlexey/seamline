@@ -137,6 +137,77 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                     b.ToTable("formula_trade", "risk");
                 });
 
+            modelBuilder.Entity("Seamline.Modules.Risk.Internal.InventoryValuation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CommodityCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("commodity_code");
+
+                    b.Property<decimal>("CurvePrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("curve_price");
+
+                    b.Property<DateTimeOffset>("CurvePublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("curve_published_at");
+
+                    b.Property<string>("DeliveryPeriod")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("delivery_period");
+
+                    b.Property<string>("Facility")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("facility");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<Guid>("StorageContractId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("storage_contract_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("UnrealizedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unrealized_amount");
+
+                    b.Property<DateTimeOffset>("ValuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valued_at");
+
+                    b.Property<decimal>("Wacog")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("wacog");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "RunId");
+
+                    b.ToTable("inventory_valuation", "risk");
+                });
+
             modelBuilder.Entity("Seamline.Modules.Risk.Internal.Position", b =>
                 {
                     b.Property<Guid>("Id")

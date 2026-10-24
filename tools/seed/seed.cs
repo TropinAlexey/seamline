@@ -127,6 +127,24 @@ foreach (var tenant in tenants)
             indexPricing = new { indexCode = "COAL-IDX", windowFrom = "2027-03-01", windowTo = "2027-03-31", premium = 1.50m }
         });
         await SubmitAsync(trader, indexPriced.Id);
+
+        // Gas storage (ADR-0036, spec 02): the worked example. 40,000 MWh at
+        // 28 and 20,000 MWh at 31 blend to a WACOG of 29.0000; withdrawing
+        // 15,000 MWh leaves 45,000 MWh at 29.0000. The EOD run values it
+        // against the GAS curve point of the run's month, which the daily
+        // curve import keeps fresh.
+        var storage = await PostAsync<IdResult>(backoffice, "storage-contracts", new
+        {
+            facility = "Demo Storage North", commodityCode = "GAS", capacity = 100_000m,
+            maxInjectionPerDay = 2_000m, maxWithdrawalPerDay = 3_000m, validFrom = "2027-04-01", validTo = "2028-03-31"
+        });
+        var gasDay = new DateOnly(2027, 4, 1);
+        for (var d = 0; d < 30; d++)
+            await SendAsync(backoffice, HttpMethod.Post, $"storage-contracts/{storage.Id}/injections",
+                new { gasDay = gasDay.AddDays(d), quantity = 2_000m, unitCost = d < 20 ? 28.00m : 31.00m });
+        for (var d = 30; d < 35; d++)
+            await SendAsync(backoffice, HttpMethod.Post, $"storage-contracts/{storage.Id}/withdrawals",
+                new { gasDay = gasDay.AddDays(d), quantity = 3_000m });
     }
     else
     {

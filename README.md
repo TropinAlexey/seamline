@@ -27,15 +27,16 @@ Multi-tenant commodity trading & risk platform on .NET 10: an ETRM core
 for power and gas forwards plus physical CTRM processes for **coal
 cargoes** (vessel nomination, B/L quantity within a tolerance, quality-
 adjusted provisional and final invoices), fixed-price or **index-priced**
-(average of daily fixings plus a premium, with fixed vs unfixed exposure).
-Gas storage is **specified, not yet implemented**. See the
+(average of daily fixings plus a premium, with fixed vs unfixed exposure),
+and **gas storage** (capacity and daily rates, an append-only movement
+ledger, stock at weighted average cost valued in the EOD run). See the
 [CTRM gap analysis](docs/ctrm-gap-analysis.md).
 Modular monolith with boundaries enforced in CI, two services extracted on
 purpose, four deploy targets (docker compose, local k8s via Helm, AWS ECS
 via Terraform, Azure Container Apps via Bicep).
 
-**Phases 1–6 complete** (Phase 6: web UI), Phase 7 (CTRM) in progress.
-313 .NET tests plus web unit and E2E suites, 39 ADRs, one pipeline to both
+**Phases 1–7 complete** (Phase 6: web UI, Phase 7: CTRM processes).
+341 .NET tests plus web unit and E2E suites, 40 ADRs, one pipeline to both
 clouds.
 
 > Simplified for demonstration; not a compliant REMIT implementation.
@@ -121,6 +122,8 @@ formats.
 
 ![Index-priced coal: 10 of 23 pricing days fixed, the expected price against the forward, and the fixed vs unfixed quantity](docs/images/web-ui-formula-pricing.png)
 
+![Gas storage: fill against capacity, WACOG and cost of stock, and the append-only movement ledger](docs/images/web-ui-gas-storage.png)
+
 ```bash
 docker compose up -d                 # includes the `web` service
 dotnet run tools/seed/seed.cs        # counterparties, curve points, trades in every state
@@ -180,6 +183,13 @@ fill on the login page:
    −53,804.35, carried by the fixed share only. As `risk`, publish more
    fixings in **Market data → Index fixings**; once all 23 days are in, back
    office confirms the final price with **Fix price**.
+10. **Storage** shows *Demo Storage North* with the worked example of
+    [spec 02](docs/specs/02-gas-storage.md): 40,000 MWh injected at 28 and
+    20,000 MWh at 31 blend to a WACOG of 29.0000; 15,000 MWh withdrawn
+    leaves 45,000 MWh at 29.0000, a cost of stock of 1,305,000.00. As
+    `backoffice`, record more injections or withdrawals; the daily rates,
+    the capacity and the stock are enforced by the server. After an EOD run
+    the card shows the stock's unrealized P&L against the GAS curve.
 
 The OpenAPI document is generated on every API build into
 `web/openapi/seamline.json` and committed; the TypeScript client types are
@@ -257,6 +267,7 @@ graph TB
         RSK["Risk\npositions, credit exposure"]
         MKT["MarketData\nforward curves"]
         STL["Settlement\ninvoices"]
+        INV["Inventory\ngas storage, WACOG"]
         AUD["Audit\nappend-only event log"]
         IDN["Identity\nJWT auth, Front/Middle/Back Office"]
     end
@@ -273,6 +284,7 @@ graph TB
     TRD -. "IFormulaPricingService" .-> RSK
     TRD -. "IIndexFixingDirectory" .-> MKT
     RSK -. "ICurvePointDirectory\nIIndexFixingDirectory" .-> MKT
+    RSK -. "IInventoryDirectory" .-> INV
 
     VAL --> RSK
     VAL --> MKT
@@ -289,7 +301,7 @@ graph TB
 ```
 
 - Solid arrows = MassTransit integration events (via RabbitMQ). Dotted = in-process query interfaces (DI).
-- Module boundaries enforced by [69 architecture tests](#testing-strategy) in CI, not by convention.
+- Module boundaries enforced by [78 architecture tests](#testing-strategy) in CI, not by convention.
 - Multi-tenant: shared schema + `tenant_id` global filter + PostgreSQL RLS, tenant claim in JWT.
 - Transactional outbox ([ADR-0004](docs/adr/0004-transactional-outbox.md)): events written in the same DB transaction as business data — no dual-write risk.
 - Credit-limit concurrency: `pg_advisory_xact_lock` per counterparty serializes concurrent trade submissions so two traders cannot silently double-breach a limit ([ADR-0027](docs/adr/0027-credit-reservation-concurrency.md)).
@@ -363,13 +375,19 @@ Implemented today:
     of the loading day;
   - power and gas stay fixed-price (REMIT's price-formula fields are not
     modelled).
-
-Specified, not yet implemented ([ADR-0032](docs/adr/0032-ctrm-scope.md);
-these lines move up into "implemented" only when the code and tests exist):
-
-- [Gas storage](docs/specs/02-gas-storage.md): capacity and daily rate
-  limits, an append-only movement ledger, stock at WACOG valued in the EOD
-  run. No capacity trading or ratchets.
+- Gas storage ([spec 02](docs/specs/02-gas-storage.md),
+  [ADR-0036](docs/adr/0036-gas-storage-inventory.md),
+  [ADR-0040](docs/adr/0040-inventory-publishes-no-events.md)):
+  - storage contracts with capacity and daily injection and withdrawal
+    rates; inventory never goes negative;
+  - an append-only movement ledger, which is also storage's audit record
+    (Inventory publishes no events);
+  - stock at weighted average cost (the same rule as a position's cost
+    basis), kept to 12 dp and shown to 4 dp;
+  - the EOD run values stock against the curve point of the run's month,
+    shown next to positions and never summed with them;
+  - no capacity trading, nominations, ratchets, realized P&L on
+    withdrawals or REMIT reporting of storage.
 
 ## API
 
@@ -416,6 +434,12 @@ transition.
 | `GET` | `/audit-events` | MO, BO | Audit trail, newest first: `?entityId=&page=&pageSize=` |
 | `GET` | `/curve-points` | any | Forward curve points |
 | `POST` | `/curve-points` | MO | Upsert curve point |
+| `GET` | `/storage-contracts` | any | Storage contracts with stock, WACOG, fill and cost of stock |
+| `POST` | `/storage-contracts` | BO | Register a storage contract (a flow commodity in MWh) |
+| `POST` | `/storage-contracts/{id}/injections` | BO | Inject gas (409 above the daily rate or the capacity) |
+| `POST` | `/storage-contracts/{id}/withdrawals` | BO | Withdraw gas at the current WACOG (409 above the daily rate or the stock) |
+| `GET` | `/storage-contracts/{id}/movements` | any | The append-only movement ledger |
+| `GET` | `/inventory/valuations/latest` | MO, BO | Stock valued in the latest EOD run: unrealized P&L against the curve |
 | `GET` | `/indices` | any | Price indices formula trades can average |
 | `GET` | `/indices/{code}/fixings` | any | Daily fixings (`?from=&to=`) |
 | `POST` | `/indices/{code}/fixings` | MO | Publish a fixing (weekdays only; 409 if the day already has one) |
@@ -424,16 +448,16 @@ transition.
 
 ## Testing strategy
 
-313 .NET tests across three layers, plus the web client's own unit and
+341 .NET tests across three layers, plus the web client's own unit and
 end-to-end suites:
 
 | Layer | Count | What it covers |
 |---|---|---|
-| Unit (Trading, Risk, Settlement, Identity, MarketData) | 149 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions (including the approver carried through the saga), password hashing, curve import, cargo tolerance band edges, laycan, quality limits, formula pricing (pricing days, expected price, MtM and stress of the fixed share to the cent, negative premium, a sell trade, index-trade booking, amend and fixing rules), final invoices (fixed and formula price), the synthetic fixing series |
-| Architecture | 69 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default, MassTransit version pin, no MediatR, explicit rounding, EF Core defaults convention, saga placement |
-| Integration | 95 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency, append-only grants, RLS tenant isolation; blotter/history/exposure/valuation/stress/audit read models, 409 for invalid transitions, role denial (403) per endpoint, per-IP login rate limiting (trusted proxy, unconfigured, two-hop with a forged entry), reservation release on delivery and move on amend, one EOD run id across valuation and stress, commodity master data (roles, duplicates, quality spec rules, unknown commodity on a trade, RLS), coal cargo (the spec's worked example to the cent, out-of-tolerance B/L, quality rejection, booking and nomination rules, audit, no REMIT for coal), formula pricing (spec 03's worked example from fixings through EOD valuation and stress to the final invoice, fixing before loading, a certificate and a fixing at the same moment, a sell trade, booking and submit rules, append-only fixings, roles, the daily synthetic fixing import) |
+| Unit (Trading, Risk, Settlement, Inventory, Identity, MarketData) | 159 | Domain logic: trade state machine, MtM calculation, credit reservation, saga transitions (including the approver carried through the saga), password hashing, curve import, cargo tolerance band edges, laycan, quality limits, formula pricing (pricing days, expected price, MtM and stress of the fixed share to the cent, negative premium, a sell trade, index-trade booking, amend and fixing rules), final invoices (fixed and formula price), the synthetic fixing series, storage WACOG (spec 02's worked example, emptying and refilling, 12 dp kept and 4 dp shown) and every rate, capacity and stock limit at its edge |
+| Architecture | 78 | Module boundaries, no cross-schema FKs, no cloud SDK in modules, decimal-only money, internal-by-default, MassTransit version pin, no MediatR, explicit rounding, EF Core defaults convention, saga placement |
+| Integration | 104 | Full HTTP pipeline per module: auth → endpoint → EF Core → Postgres (Testcontainers), MassTransit consumers, transactional outbox delivery, credit-limit concurrency, append-only grants, RLS tenant isolation; blotter/history/exposure/valuation/stress/audit read models, 409 for invalid transitions, role denial (403) per endpoint, per-IP login rate limiting (trusted proxy, unconfigured, two-hop with a forged entry), reservation release on delivery and move on amend, one EOD run id across valuation and stress, commodity master data (roles, duplicates, quality spec rules, unknown commodity on a trade, RLS), coal cargo (the spec's worked example to the cent, out-of-tolerance B/L, quality rejection, booking and nomination rules, audit, no REMIT for coal), formula pricing (spec 03's worked example from fixings through EOD valuation and stress to the final invoice, fixing before loading, a certificate and a fixing at the same moment, a sell trade, booking and submit rules, append-only fixings, roles, the daily synthetic fixing import), gas storage (spec 02's worked example to the EOD unrealized P&L, limits as 409, two injections at the same moment, roles, tenant isolation, no valuation without a curve point) |
 | Web unit (Vitest) | 29 | JWT decoding, money/date formatting, the allowed-actions table (state × role), history diff, nav role gating |
-| Web E2E (Playwright) | 14 | Against the full compose stack: create/submit within limit, breach → MO approve via the saga, MO reject, amend with diff, deliver → BO invoice, tenant isolation, BO role gating, FO role gating, curve change → live MtM change, deep-link reload, commodity units, coal cargo end to end (nominate, load, certify, provisional and final invoices), no Deliver button on a cargo, index-priced coal (fixings published on the Market data page, k-of-N progress, back office fixes the final price) |
+| Web E2E (Playwright) | 15 | Against the full compose stack: create/submit within limit, breach → MO approve via the saga, MO reject, amend with diff, deliver → BO invoice, tenant isolation, BO role gating, FO role gating, curve change → live MtM change, deep-link reload, commodity units, coal cargo end to end (nominate, load, certify, provisional and final invoices), no Deliver button on a cargo, index-priced coal (fixings published on the Market data page, k-of-N progress, back office fixes the final price), gas storage (injections blend the WACOG, a withdrawal keeps it, a rate breach refused) |
 
 CI (`.github/workflows/ci.yml`) runs four jobs: `build-and-test` (all .NET
 tests), `api-contract` (fails if the committed OpenAPI document is stale),
@@ -759,6 +783,7 @@ rather than hidden:
 | HTTPS | `UseHttpsRedirection()` in pipeline | TLS termination at ALB/App Gateway |
 | Rate limiting | `POST /auth/login` only: 5 per minute per client IP, `X-Forwarded-For` trusted only from configured proxy networks (ADR-0030) | Per-account limit with backoff; edge rate limiting (WAF / API gateway) for all endpoints |
 | Audit trail | Append-only, `SELECT`/`INSERT` grants only | Same — this is production-grade |
+| Index fixings | Middle office only, append-only, publisher recorded; any weekday is accepted, a future one included, because the demo trades future months and has no market clock | Reject a fixing dated after the market's today; four-eyes on manual publication; versioned corrections (ADR-0035 revisit criteria) |
 | Stored credentials | None — OIDC workload identity federation | Same |
 
 ## Status
@@ -771,7 +796,7 @@ rather than hidden:
 | 4 — docs & polish | Architecture diagram, ADR consistency | Mermaid diagram, README structure, ADR style pass |
 | 5 — Azure | Cloud portability lane | Bicep infra ([ADR-0023](docs/adr/0023-container-apps-and-bicep.md)); Azure Service Bus transport ([ADR-0020](docs/adr/0020-azure-service-bus-transport.md)); Azure Functions Timer trigger ([ADR-0022](docs/adr/0022-serverless-valuation-trigger.md)); portability arch-test ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)); one pipeline, both clouds ([ADR-0024](docs/adr/0024-github-actions-federation.md)) |
 | 6 — web UI | Making the backend visible | React + Mantine SPA behind a same-origin nginx proxy; OpenAPI as a committed, CI-checked contract; real approver recorded through the saga; 409 for invalid transitions; per-IP login limiting; second demo tenant; Playwright E2E ([ADR-0030](docs/adr/0030-web-ui.md)). Risk/audit read models: EOD run id, live MtM with server totals, exposure shared with the credit check, credit reservations released on delivery and moved on amend, full lifecycle audit, Hangfire dashboard in Development ([ADR-0031](docs/adr/0031-risk-read-models-for-the-ui.md)) |
-| 7 — CTRM *(in progress)* | Physical commodity processes | Commodity master data with units ([ADR-0033](docs/adr/0033-commodity-master-data.md)); coal cargoes: nomination, B/L within tolerance as delivery, quality-adjusted provisional and final invoices ([ADR-0034](docs/adr/0034-coal-cargo-logistics.md), [ADR-0037](docs/adr/0037-shipment-lives-in-trading.md)); formula pricing with append-only index fixings and per-trade valuation of the fixed share ([ADR-0035](docs/adr/0035-formula-pricing.md), [ADR-0038](docs/adr/0038-price-fixing-is-confirmed-in-trading.md)). Gas storage specified ([ADR-0032](docs/adr/0032-ctrm-scope.md)) |
+| 7 — CTRM | Physical commodity processes | Commodity master data with units ([ADR-0033](docs/adr/0033-commodity-master-data.md)); coal cargoes: nomination, B/L within tolerance as delivery, quality-adjusted provisional and final invoices ([ADR-0034](docs/adr/0034-coal-cargo-logistics.md), [ADR-0037](docs/adr/0037-shipment-lives-in-trading.md)); formula pricing with append-only index fixings and per-trade valuation of the fixed share ([ADR-0035](docs/adr/0035-formula-pricing.md), [ADR-0038](docs/adr/0038-price-fixing-is-confirmed-in-trading.md)); gas storage with a movement ledger and stock at WACOG valued in the EOD run ([ADR-0036](docs/adr/0036-gas-storage-inventory.md), [ADR-0040](docs/adr/0040-inventory-publishes-no-events.md)). Scope and order: [ADR-0032](docs/adr/0032-ctrm-scope.md) |
 | — k8s | Local Kubernetes | Helm chart, k3d bootstrap, health probes (liveness/readiness/startup), migration Job, graceful shutdown, OTel Collector → Jaeger pipeline ([ADR-0026](docs/adr/0026-local-k3s-deployment.md)) |
 
 The code delta between AWS and Azure is one thing: the MassTransit transport
@@ -780,7 +805,7 @@ secrets, compute, database, telemetry — is platform-abstracted or identical,
 enforced by an architecture test that fails the build if any `AWSSDK.*` or
 `Azure.*` package leaks into a module assembly ([ADR-0021](docs/adr/0021-portability-enforced-in-ci.md)).
 
-<details><summary>ADRs (37 decisions)</summary>
+<details><summary>ADRs (40 decisions)</summary>
 
 | ADR | Topic |
 |---|---|
@@ -815,13 +840,14 @@ enforced by an architecture test that fails the build if any `AWSSDK.*` or
 | [0029](docs/adr/0029-init-process-pid1.md) | tini as PID 1: unhandled exceptions terminate the container instead of hanging |
 | [0030](docs/adr/0030-web-ui.md) | Thin web UI: React, same-origin `/api` proxy, OpenAPI as the committed contract |
 | [0031](docs/adr/0031-risk-read-models-for-the-ui.md) | Risk & audit read models: EOD run id, one exposure calculation, reservations that follow the trade |
-| [0032](docs/adr/0032-ctrm-scope.md) | Scope: from an ETRM core to a CTRM — what is missing, in which order it is built *(steps 1–3 implemented)* |
+| [0032](docs/adr/0032-ctrm-scope.md) | Scope: from an ETRM core to a CTRM — what is missing, in which order it is built *(implemented)* |
 | [0033](docs/adr/0033-commodity-master-data.md) | Commodity master data and units of measure |
 | [0034](docs/adr/0034-coal-cargo-logistics.md) | Coal cargo: actualization within a tolerance, quality-adjusted provisional and final invoices (amended by 0037) |
 | [0035](docs/adr/0035-formula-pricing.md) | Formula pricing and append-only daily index fixings (amended by 0038) |
-| [0036](docs/adr/0036-gas-storage-inventory.md) | Gas storage: Inventory module and WACOG *(specified)* |
+| [0036](docs/adr/0036-gas-storage-inventory.md) | Gas storage: Inventory module and WACOG (amended by 0040) |
 | [0037](docs/adr/0037-shipment-lives-in-trading.md) | The shipment lives in Trading: one outbox, loading and delivery in one transaction (amends 0034) |
 | [0038](docs/adr/0038-price-fixing-is-confirmed-in-trading.md) | Back office confirms the final price in Trading; no fixing event from MarketData (amends 0035) |
 | [0039](docs/adr/0039-integration-tests-wait-for-consumers.md) | Integration tests wait for the consumer they depend on, not for a clock; the test host starts after the bus |
+| [0040](docs/adr/0040-inventory-publishes-no-events.md) | Inventory publishes no events (its ledger is the audit record) and keeps WACOG at 12 dp (amends 0036) |
 
 </details>

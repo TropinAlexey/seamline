@@ -16,15 +16,17 @@ internal sealed class InventoryDirectory(InventoryDbContext db, IConfiguration c
 
     // No tenant registry exists (ADR-0005): the owner connection bypasses
     // RLS and the query filter for this one read, as in every runner's
-    // tenant discovery. Per-tenant reads afterwards go through the app role.
-    public async Task<IReadOnlyList<Guid>> TenantsWithStockAsync(CancellationToken cancellationToken = default)
+    // tenant discovery. It returns tenant ids only, never stock; per-tenant
+    // reads afterwards go through the app role. The owner context is built
+    // here, not by a shared helper, on purpose: each RLS bypass stays
+    // visible at the one place that needs it.
+    public async Task<IReadOnlyList<Guid>> TenantsWithStorageAsync(CancellationToken cancellationToken = default)
     {
         var options = new DbContextOptionsBuilder<InventoryDbContext>()
             .UseNpgsql(configuration.GetConnectionString("PostgresMigrator"))
             .Options;
         await using var owner = new InventoryDbContext(options, new TenantContext());
         return await owner.StorageContracts.IgnoreQueryFilters()
-            .Where(c => c.Quantity > 0)
             .Select(c => c.TenantId.Value)
             .Distinct()
             .ToListAsync(cancellationToken);

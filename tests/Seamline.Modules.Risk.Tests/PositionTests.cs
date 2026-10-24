@@ -101,6 +101,33 @@ public class PositionTests
         Assert.Equal(0m, position.WeightedAvgPrice);
     }
 
+    // Regression for the move of the averaging rule into SharedKernel
+    // (WeightedAverageCost, ADR-0036): crossing zero in one step starts the
+    // new side afresh at the incoming price, as before.
+    [Fact]
+    public void WeightedAvgPrice_restarts_at_the_incoming_price_when_a_trade_flips_the_position()
+    {
+        var position = Position.Create(TenantId.New(), "POWER", "2027-03");
+        position.Apply(100m, 40m);
+
+        position.Apply(-150m, 55m); // long 100 → short 50
+
+        Assert.Equal(-50m, position.NetVolume);
+        Assert.Equal(55m, position.WeightedAvgPrice);
+    }
+
+    [Fact]
+    public void WeightedAvgPrice_blends_on_the_short_side_too()
+    {
+        var position = Position.Create(TenantId.New(), "POWER", "2027-03");
+        position.Apply(-100m, 40m);
+
+        position.Apply(-100m, 50m);
+
+        Assert.Equal(-200m, position.NetVolume);
+        Assert.Equal(45m, position.WeightedAvgPrice);
+    }
+
     [Fact]
     public void Amend_style_unweight_and_reweight_leaves_only_the_new_contribution()
     {

@@ -2143,6 +2143,8 @@ export interface components {
       quantity: number;
       /** Format: double */
       unitCost: number;
+      /** Format: double */
+      cost: number;
       /** Format: uuid */
       tradeId: null | string;
       /** Format: double */

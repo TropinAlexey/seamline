@@ -40,7 +40,7 @@ internal sealed class InventoryValuation : TenantOwnedEntity<Guid>
             CommodityCode = stock.CommodityCode,
             DeliveryPeriod = deliveryPeriod,
             Quantity = stock.Quantity,
-            Wacog = Math.Round(stock.Wacog, 4, MidpointRounding.ToEven),
+            Wacog = PriceScale.Round(stock.Wacog),
             CurvePrice = curvePrice,
             CurvePublishedAt = curvePublishedAt,
             UnrealizedAmount = MtmCalculator.Calculate(curvePrice, stock.Wacog, stock.Quantity),

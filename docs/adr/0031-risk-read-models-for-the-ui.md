@@ -4,6 +4,8 @@
 
 Accepted
 
+Amended in part by [ADR-0041](0041-eod-run-marker-per-tenant.md): the latest run is the tenant's newest run marker, not the newest row of each table.
+
 ## Context
 
 The web UI (ADR-0030) shows positions with MtM, the latest EOD valuation

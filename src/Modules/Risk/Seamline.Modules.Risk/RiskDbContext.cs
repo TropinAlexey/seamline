@@ -15,6 +15,7 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
     public DbSet<StressScenarioResult> StressScenarioResults => Set<StressScenarioResult>();
     public DbSet<FormulaTrade> FormulaTrades => Set<FormulaTrade>();
     public DbSet<InventoryValuation> InventoryValuations => Set<InventoryValuation>();
+    public DbSet<ValuationRun> ValuationRuns => Set<ValuationRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -148,6 +149,21 @@ internal sealed class RiskDbContext(DbContextOptions<RiskDbContext> options, ITe
 
             builder.HasIndex(v => new { v.TenantId, v.RunId });
             builder.HasQueryFilter(v => v.TenantId == tenantContext.TenantId);
+        });
+
+        modelBuilder.Entity<ValuationRun>(builder =>
+        {
+            builder.ToTable("valuation_run");
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.TenantId)
+                .HasConversion(t => t.Value, v => new TenantId(v))
+                .HasColumnName("tenant_id");
+            builder.Property(r => r.RunId).HasColumnName("run_id");
+            builder.Property(r => r.ValuedAt).HasColumnName("valued_at");
+
+            builder.HasIndex(r => new { r.TenantId, r.RunId }).IsUnique();
+            builder.HasIndex(r => new { r.TenantId, r.ValuedAt });
+            builder.HasQueryFilter(r => r.TenantId == tenantContext.TenantId);
         });
     }
 

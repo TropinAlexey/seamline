@@ -115,7 +115,7 @@ public static class MarketDataEndpoints
             if (await db.IndexFixings.AnyAsync(f => f.IndexCode == code && f.FixingDate == request.FixingDate, ct))
                 return FixingExists(code, request.FixingDate);
 
-            var publishedBy = user.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
+            var publishedBy = user.ActorName();
             var fixing = IndexFixing.Publish(tenant.TenantId, code, request.FixingDate, request.Value, publishedBy);
             db.IndexFixings.Add(fixing);
             try

@@ -43,7 +43,7 @@ internal sealed record FormulaPrice(
     // The one rounding point for a displayed price or notional: 4 dp, the
     // scale of every price column (ADR-0007).
     public static decimal? ToPriceScale(decimal? value) =>
-        value is { } v ? Math.Round(v, 4, MidpointRounding.ToEven) : null;
+        value is { } v ? PriceScale.Round(v) : null;
 
     public decimal FixedQuantity(decimal volume) =>
         Math.Round(volume * FixedDays / PricingDays, 3, MidpointRounding.ToEven);

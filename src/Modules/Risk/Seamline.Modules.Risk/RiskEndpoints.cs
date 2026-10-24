@@ -77,12 +77,7 @@ public static class RiskEndpoints
 
         app.MapGet("/valuations/latest", async (RiskDbContext db, CancellationToken ct) =>
         {
-            // Every row of a run shares RunId and ValuedAt (EodRun), so the
-            // newest row identifies the newest run.
-            var latest = await db.ValuationSnapshots.AsNoTracking()
-                .OrderByDescending(v => v.ValuedAt)
-                .Select(v => new { v.RunId, v.ValuedAt })
-                .FirstOrDefaultAsync(ct);
+            var latest = await LatestRunAsync(db, ct);
             if (latest is null)
                 return Results.Ok(new ValuationRunResponse(null, null, [], 0m));
 
@@ -99,14 +94,12 @@ public static class RiskEndpoints
         .WithTags("Risk")
         .Produces<ValuationRunResponse>();
 
-        // Gas in storage from the latest EOD run (ADR-0036). Every row of a
-        // run shares its RunId, so the newest row identifies the run.
+        // Gas in storage from the latest EOD run (ADR-0036). A contract the
+        // run skipped or found empty has no row in it: it shows no P&L
+        // rather than an older run's (ADR-0041).
         app.MapGet("/inventory/valuations/latest", async (RiskDbContext db, CancellationToken ct) =>
         {
-            var latest = await db.InventoryValuations.AsNoTracking()
-                .OrderByDescending(v => v.ValuedAt)
-                .Select(v => new { v.RunId, v.ValuedAt })
-                .FirstOrDefaultAsync(ct);
+            var latest = await LatestRunAsync(db, ct);
             if (latest is null)
                 return Results.Ok(new InventoryValuationRunResponse(null, null, [], 0m));
 
@@ -126,10 +119,7 @@ public static class RiskEndpoints
 
         app.MapGet("/stress-results/latest", async (RiskDbContext db, CancellationToken ct) =>
         {
-            var latest = await db.StressScenarioResults.AsNoTracking()
-                .OrderByDescending(s => s.ValuedAt)
-                .Select(s => new { s.RunId, s.ValuedAt })
-                .FirstOrDefaultAsync(ct);
+            var latest = await LatestRunAsync(db, ct);
             if (latest is null)
                 return Results.Ok(new StressRunResponse(null, null, 0m, []));
 
@@ -186,6 +176,15 @@ public static class RiskEndpoints
 
         return app;
     }
+
+    // The tenant's newest EOD run, from its run marker (ADR-0041), not from
+    // the newest valuation row: a run that valued nothing for one view
+    // still is the latest run for it.
+    private static Task<EodRun?> LatestRunAsync(RiskDbContext db, CancellationToken ct) =>
+        db.ValuationRuns.AsNoTracking()
+            .OrderByDescending(r => r.ValuedAt)
+            .Select(r => new EodRun(r.RunId, r.ValuedAt))
+            .FirstOrDefaultAsync(ct);
 
     private static decimal? SumOrNull(IEnumerable<decimal?> amounts)
     {

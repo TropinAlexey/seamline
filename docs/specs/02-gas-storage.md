@@ -82,7 +82,9 @@ so two at the same moment cannot both pass the daily rate (ADR-0040).
    `unrealized = MtmCalculator.Calculate(curvePrice, wacog, quantity)`. It
    is stored in an append-only `risk.inventory_valuation` with the EOD
    `run_id` (ADR-0031). If no curve point exists, the stock is skipped and
-   logged, the same as for positions (ADR-0014).
+   logged, the same as for positions (ADR-0014). The latest valuation is
+   the tenant's latest run, not its newest row, so a skipped or emptied
+   contract shows no P&L rather than an older run's (ADR-0041).
 
 ## Worked example
 
@@ -98,8 +100,14 @@ withdrawal.
 - Cost of the gas withdrawn: 15,000 × 29.0000 = **435,000.00**.
 - EOD with the GAS curve at 33.0000: unrealized = (33.0000 − 29.0000) ×
   45,000 = **180,000.00**.
+- Withdrawing the 15,000 MWh costs 87,000.00 a day (3,000 × 29.0000),
+  each day's cost rounded to cents in the ledger.
 - Injecting 2,500 MWh on one gas day returns 409 (above 2,000/day).
-  Withdrawing 46,000 MWh returns 409 (above the stock).
+- Withdrawing 46,000 MWh returns 409 too, but for the daily rate: it is
+  checked first, and 46,000 is above 3,000/day as well as above the
+  45,000 MWh stock. The stock rule is tested at its own edge, below the
+  rate: with 2,000 MWh in storage, withdrawing 2,500 MWh returns 409
+  (above the stock).
 
 ## Inventory vs position (no double counting)
 
@@ -107,7 +115,8 @@ A position is a contract that has not yet delivered. Inventory is gas that
 has. A buy trade for April adds to the April position. When it is
 delivered, the position closes (ADR-0014). If BO then injects that gas,
 quoting the trade id, it appears in inventory. The two are shown side by
-side and never summed: Positions page "Live" tab, and a new "Storage" tab.
+side and never summed: positions on the Positions page, stock on the
+Storage page (see API and UI).
 
 ## Integration events
 
@@ -127,7 +136,7 @@ the same pattern as `ICurvePointDirectory`.
 - UI:
   - a **Storage** page: one card per contract with a fill gauge (stock vs
     capacity), WACOG, cost of stock and the last EOD's unrealized P&L,
-    plus the movement ledger. It is a page of its own rather than a tab on
+    plus the movement ledger with each movement's cost. It is a page of its own rather than a tab on
     Positions: stock and positions are shown side by side, never summed;
   - the BO forms enforce nothing the server doesn't.
 

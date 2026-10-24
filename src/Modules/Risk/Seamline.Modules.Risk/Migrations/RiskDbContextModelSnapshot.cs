@@ -322,6 +322,34 @@ namespace Seamline.Modules.Risk.Internal.Migrations
                     b.ToTable("stress_scenario_result", "risk");
                 });
 
+            modelBuilder.Entity("Seamline.Modules.Risk.Internal.ValuationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("ValuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valued_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "RunId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "ValuedAt");
+
+                    b.ToTable("valuation_run", "risk");
+                });
+
             modelBuilder.Entity("Seamline.Modules.Risk.Internal.ValuationSnapshot", b =>
                 {
                     b.Property<Guid>("Id")

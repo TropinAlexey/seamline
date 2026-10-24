@@ -51,11 +51,8 @@ public static class InventoryEndpoints
             var movements = await db.Movements.AsNoTracking()
                 .Where(m => m.StorageContractId == id)
                 .OrderBy(m => m.Version)
-                .Select(m => new InventoryMovementEntry(
-                    m.Version, m.GasDay, m.Kind, m.Quantity, m.UnitCost, m.TradeId, m.QuantityAfter, m.WacogAfter,
-                    m.Actor, m.Reason, m.RecordedAt))
                 .ToListAsync(ct);
-            return Results.Ok(movements);
+            return Results.Ok(movements.Select(InventoryMovementEntry.From).ToList());
         })
         .Produces<List<InventoryMovementEntry>>();
 
@@ -63,7 +60,7 @@ public static class InventoryEndpoints
                 Guid id, InjectGasRequest request, InventoryDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
             RecordMovementAsync(db, id, InventoryMovementKind.Injection, request.GasDay, ct,
                 (contract, sameDay) => contract.Inject(request.GasDay, request.Quantity, request.UnitCost, sameDay,
-                    request.TradeId, ActorName(user), request.Reason ?? "Injected")))
+                    request.TradeId, user.ActorName(), request.Reason ?? "Injected")))
         .RequireAuthorization(policy => policy.RequireRole(IdentityRoles.BackOffice))
         .Produces<StorageContractEntry>()
         .Produces(StatusCodes.Status404NotFound)
@@ -74,7 +71,7 @@ public static class InventoryEndpoints
                 Guid id, WithdrawGasRequest request, InventoryDbContext db, ClaimsPrincipal user, CancellationToken ct) =>
             RecordMovementAsync(db, id, InventoryMovementKind.Withdrawal, request.GasDay, ct,
                 (contract, sameDay) => contract.Withdraw(request.GasDay, request.Quantity, sameDay,
-                    request.TradeId, ActorName(user), request.Reason ?? "Withdrawn")))
+                    request.TradeId, user.ActorName(), request.Reason ?? "Withdrawn")))
         .RequireAuthorization(policy => policy.RequireRole(IdentityRoles.BackOffice))
         .Produces<StorageContractEntry>()
         .Produces(StatusCodes.Status404NotFound)
@@ -109,8 +106,6 @@ public static class InventoryEndpoints
 
         return Results.Ok(StorageContractEntry.From(contract));
     }
-
-    private static string ActorName(ClaimsPrincipal user) => user.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
 }
 
 internal sealed record RegisterStorageContractRequest(
@@ -151,15 +146,25 @@ internal sealed record StorageContractEntry(
         c.Version);
 }
 
+// Cost is quantity × unit cost, rounded to cents once here (spec 02,
+// rule 5): what the gas injected was bought for, or what the gas withdrawn
+// cost at the WACOG.
 internal sealed record InventoryMovementEntry(
     int Version,
     DateOnly GasDay,
     InventoryMovementKind Kind,
     decimal Quantity,
     decimal UnitCost,
+    decimal Cost,
     Guid? TradeId,
     decimal QuantityAfter,
     decimal WacogAfter,
     string Actor,
     string Reason,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt)
+{
+    public static InventoryMovementEntry From(InventoryMovement m) => new(
+        m.Version, m.GasDay, m.Kind, m.Quantity, m.UnitCost,
+        Math.Round(m.Quantity * m.UnitCost, 2, MidpointRounding.ToEven),
+        m.TradeId, m.QuantityAfter, m.WacogAfter, m.Actor, m.Reason, m.RecordedAt);
+}

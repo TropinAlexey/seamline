@@ -2191,6 +2191,7 @@
           "kind",
           "quantity",
           "unitCost",
+          "cost",
           "tradeId",
           "quantityAfter",
           "wacogAfter",
@@ -2216,6 +2217,10 @@
             "format": "double"
           },
           "unitCost": {
+            "type": "number",
+            "format": "double"
+          },
+          "cost": {
             "type": "number",
             "format": "double"
           },

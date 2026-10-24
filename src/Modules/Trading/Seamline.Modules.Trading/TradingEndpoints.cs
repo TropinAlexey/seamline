@@ -89,7 +89,7 @@ public static class TradingEndpoints
                 pricing);
 
             db.Trades.Add(trade);
-            var actor = ActorName(user);
+            var actor = user.ActorName();
             db.TradeHistory.Add(TradeHistory.CreateSnapshot(trade, actor, "Created"));
             await publisher.Publish(new TradeCreated(trade.Id, tenant.TenantId.Value, actor, "Created"), ct);
             await db.SaveChangesAsync(ct);
@@ -191,7 +191,7 @@ public static class TradingEndpoints
                         $"The expected price of {trade.Id} is {priced.ExpectedPrice:0.0000}, not positive: the premium is deeper than the index."));
             }
 
-            var actor = ActorName(user);
+            var actor = user.ActorName();
             var submitHistory = trade.Submit(actor, "Submitted for credit check");
             db.TradeHistory.Add(submitHistory);
             await publisher.Publish(new TradeSubmitted(trade.Id, tenant.TenantId.Value, actor, "Submitted for credit check"), ct);
@@ -231,7 +231,7 @@ public static class TradingEndpoints
             if (trade.State != TradeState.CreditPending)
                 return Results.Conflict(new ErrorResponse($"Trade {id} must be in CreditPending state to approve, was {trade.State}."));
 
-            await publisher.Publish(new TradeApprovalGranted(id, ActorName(user)), ct);
+            await publisher.Publish(new TradeApprovalGranted(id, user.ActorName()), ct);
             await db.SaveChangesAsync(ct);
             return Results.Accepted();
         })
@@ -248,7 +248,7 @@ public static class TradingEndpoints
             if (trade.State != TradeState.CreditPending)
                 return Results.Conflict(new ErrorResponse($"Trade {id} must be in CreditPending state to reject, was {trade.State}."));
 
-            await publisher.Publish(new TradeApprovalDenied(id, ActorName(user)), ct);
+            await publisher.Publish(new TradeApprovalDenied(id, user.ActorName()), ct);
             await db.SaveChangesAsync(ct);
             return Results.Accepted();
         })
@@ -269,12 +269,12 @@ public static class TradingEndpoints
             // and Submitted never started a saga, so those cancel inline.
             if (trade.State == TradeState.CreditPending)
             {
-                await publisher.Publish(new TradeCancelRequested(id, ActorName(user)), ct);
+                await publisher.Publish(new TradeCancelRequested(id, user.ActorName()), ct);
                 await db.SaveChangesAsync(ct);
                 return Results.Accepted();
             }
 
-            var actor = ActorName(user);
+            var actor = user.ActorName();
             var history = trade.Cancel(actor, "Cancelled by trader");
             db.TradeHistory.Add(history);
             await publisher.Publish(new TradeCancelled(trade.Id, trade.TenantId.Value, actor, "Cancelled by trader"), ct);
@@ -294,7 +294,7 @@ public static class TradingEndpoints
             if (trade is null)
                 return Results.NotFound();
 
-            var (history, amended) = trade.Amend(ActorName(user), request.Reason, request.Volume, request.Price);
+            var (history, amended) = trade.Amend(user.ActorName(), request.Reason, request.Volume, request.Price);
             db.TradeHistory.Add(history);
             await publisher.Publish(amended, ct);
             await db.SaveChangesAsync(ct);
@@ -313,7 +313,7 @@ public static class TradingEndpoints
             if (trade is null)
                 return Results.NotFound();
 
-            var (history, delivered) = trade.Deliver(ActorName(user), "Delivered");
+            var (history, delivered) = trade.Deliver(user.ActorName(), "Delivered");
             db.TradeHistory.Add(history);
             await publisher.Publish(delivered, ct);
             await db.SaveChangesAsync(ct);
@@ -362,7 +362,7 @@ public static class TradingEndpoints
             var shipment = await db.Shipments.FirstOrDefaultAsync(s => s.TradeId == id, ct);
             var certificate = shipment?.CertifiedQuality(trade.CargoTerms!);
 
-            var (history, priceFixed) = trade.FixPrice(ActorName(user), finalPrice, priced.AverageFixing!.Value, certificate);
+            var (history, priceFixed) = trade.FixPrice(user.ActorName(), finalPrice, priced.AverageFixing!.Value, certificate);
             db.TradeHistory.Add(history);
             await publisher.Publish(priceFixed, ct);
             await db.SaveChangesAsync(ct);
@@ -379,9 +379,6 @@ public static class TradingEndpoints
 
         return app;
     }
-
-    internal static string ActorName(ClaimsPrincipal user)
-        => user.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
 }
 
 internal sealed record CreateTradeRequest(

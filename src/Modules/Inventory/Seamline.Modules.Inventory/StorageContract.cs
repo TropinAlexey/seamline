@@ -27,7 +27,7 @@ internal sealed class StorageContract : TenantOwnedEntity<Guid>
 
     public const int WacogScale = 12;
 
-    public decimal WacogShown => Math.Round(Wacog, 4, MidpointRounding.ToEven);
+    public decimal WacogShown => PriceScale.Round(Wacog);
     public int Version { get; private set; }
 
     private StorageContract() { }

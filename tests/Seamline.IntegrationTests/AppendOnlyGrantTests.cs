@@ -17,6 +17,7 @@ public sealed class AppendOnlyGrantTests(SeamlineApiFactory factory) : IClassFix
     [InlineData("marketdata.index_fixing")]
     [InlineData("inventory.inventory_movement")]
     [InlineData("risk.inventory_valuation")]
+    [InlineData("risk.valuation_run")]
     [InlineData("settlement.invoice")]
     public async Task Runtime_role_cannot_update_append_only_table(string table)
     {
@@ -41,6 +42,7 @@ public sealed class AppendOnlyGrantTests(SeamlineApiFactory factory) : IClassFix
     [InlineData("marketdata.index_fixing")]
     [InlineData("inventory.inventory_movement")]
     [InlineData("risk.inventory_valuation")]
+    [InlineData("risk.valuation_run")]
     [InlineData("settlement.invoice")]
     public async Task Runtime_role_cannot_delete_from_append_only_table(string table)
     {

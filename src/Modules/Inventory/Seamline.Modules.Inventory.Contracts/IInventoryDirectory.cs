@@ -17,8 +17,10 @@ public interface IInventoryDirectory
     // The current tenant's storage contracts that hold gas.
     Task<IReadOnlyList<StorageBalanceRef>> ListStockAsync(CancellationToken cancellationToken = default);
 
-    // Every tenant that holds gas anywhere — the EOD pass's tenant
-    // discovery, read through the owner connection because there is no
-    // tenant registry (ADR-0005), like Risk's own discovery of positions.
-    Task<IReadOnlyList<Guid>> TenantsWithStockAsync(CancellationToken cancellationToken = default);
+    // Every tenant with a storage contract, full or empty — the EOD pass's
+    // tenant discovery, so a tenant whose storage emptied still gets the
+    // run's marker (ADR-0041). Read through the owner connection because
+    // there is no tenant registry (ADR-0005), like Risk's own discovery of
+    // positions. Tenant ids only: no stock leaves through this call.
+    Task<IReadOnlyList<Guid>> TenantsWithStorageAsync(CancellationToken cancellationToken = default);
 }

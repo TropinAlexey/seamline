@@ -136,6 +136,7 @@ function Ledger({ contractId }: { contractId: string }) {
               <Table.Th>Movement</Table.Th>
               <Table.Th ta="right">MWh</Table.Th>
               <Table.Th ta="right">Unit cost</Table.Th>
+              <Table.Th ta="right">Cost (EUR)</Table.Th>
               <Table.Th ta="right">Stock after</Table.Th>
               <Table.Th ta="right">WACOG after</Table.Th>
               <Table.Th>By</Table.Th>
@@ -149,6 +150,7 @@ function Ledger({ contractId }: { contractId: string }) {
                 <Table.Td>{m.kind}</Table.Td>
                 <Table.Td ta="right">{formatVolume(m.quantity)}</Table.Td>
                 <Table.Td ta="right">{formatPrice(m.unitCost)}</Table.Td>
+                <Table.Td ta="right">{formatAmount(m.cost)}</Table.Td>
                 <Table.Td ta="right">{formatVolume(m.quantityAfter)}</Table.Td>
                 <Table.Td ta="right">{formatPrice(m.wacogAfter)}</Table.Td>
                 <Table.Td>{m.actor}</Table.Td>

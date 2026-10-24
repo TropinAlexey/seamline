@@ -34,7 +34,7 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
     {
         var tenantIds = await DiscoverTenantIdsToValueAsync(cancellationToken);
         var run = EodRun.Start();
-        logger.LogInformation("Valuation run {RunId} starting for {TenantCount} tenant(s) with open positions.", run.RunId, tenantIds.Count);
+        logger.LogInformation("Valuation run {RunId} starting for {TenantCount} tenant(s) with positions, index-priced trades or storage.", run.RunId, tenantIds.Count);
 
         foreach (var tenantId in tenantIds)
         {
@@ -80,6 +80,9 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
         await ValueFormulaTradesAsync(scope.ServiceProvider, db, run, tenantId, cancellationToken);
         await ValueStockAsync(scope.ServiceProvider, db, run, tenantId, cancellationToken);
 
+        // Marks the run for the tenant even when it valued nothing, so the
+        // latest-run views show this run and not an older one (ADR-0041).
+        db.ValuationRuns.Add(ValuationRun.Mark(new TenantId(tenantId), run));
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -145,11 +148,17 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
 
     // No tenant registry exists anywhere in this project — multi-tenancy is
     // shared-schema + tenant_id, not a central Tenant table (ADR-0005). The
-    // owner connection is the only way to discover which tenants have open
-    // positions at all, bypassing RLS and the EF query filter for this one
-    // read. Every per-tenant read/write after this still goes through the
-    // restricted seamline_app connection with RLS and the query filter both
-    // active, same as everywhere else in the app.
+    // owner connection is the only way to discover which tenants to value at
+    // all, bypassing RLS and the EF query filter for this one read. Every
+    // per-tenant read/write after this still goes through the restricted
+    // seamline_app connection with RLS and the query filter both active,
+    // same as everywhere else in the app.
+    //
+    // A tenant is visited if it has ever had a position, an index-priced
+    // trade or a storage contract, not only if one is open now: a tenant
+    // whose last position closed or whose storage emptied still gets this
+    // run's marker, so its latest run is today's, valuing nothing, rather
+    // than yesterday's with stale P&L (ADR-0041).
     private async Task<List<Guid>> DiscoverTenantIdsToValueAsync(CancellationToken cancellationToken)
     {
         var configuration = services.GetRequiredService<IConfiguration>();
@@ -158,18 +167,16 @@ internal sealed class EndOfDayValuationRunner(IServiceProvider services, ILogger
 
         await using var db = new RiskDbContext(optionsBuilder.Options, new TenantContext());
         var withPositions = await db.Positions.IgnoreQueryFilters()
-            .Where(p => p.NetVolume != 0)
             .Select(p => p.TenantId.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
         var withFormulaTrades = await db.FormulaTrades.IgnoreQueryFilters()
-            .Where(f => f.IsOpen)
             .Select(f => f.TenantId.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
         using var inventoryScope = services.CreateScope();
-        var withStock = await inventoryScope.ServiceProvider
-            .GetRequiredService<IInventoryDirectory>().TenantsWithStockAsync(cancellationToken);
-        return withPositions.Union(withFormulaTrades).Union(withStock).ToList();
+        var withStorage = await inventoryScope.ServiceProvider
+            .GetRequiredService<IInventoryDirectory>().TenantsWithStorageAsync(cancellationToken);
+        return withPositions.Union(withFormulaTrades).Union(withStorage).ToList();
     }
 }

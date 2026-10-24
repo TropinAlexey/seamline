@@ -68,7 +68,7 @@ internal static class ShipmentEndpoints
                 throw new DomainRuleViolationException($"Trade {tradeId} already has a nominated vessel.");
 
             var (shipment, history, nominated) = Shipment.Nominate(
-                trade, request.VesselName, request.Imo, request.Eta, TradingEndpoints.ActorName(user));
+                trade, request.VesselName, request.Imo, request.Eta, user.ActorName());
             db.Shipments.Add(shipment);
             db.ShipmentHistory.Add(history);
             await publisher.Publish(nominated, ct);
@@ -100,7 +100,7 @@ internal static class ShipmentEndpoints
                 ? (await formulaPricing.PriceFormulaAsync(trade, ct))?.ExpectedPrice
                 : null;
 
-            var actor = TradingEndpoints.ActorName(user);
+            var actor = user.ActorName();
             var shipmentHistory = shipment.RecordLoading(request.BlQuantity, request.BlDate, actor);
             var (tradeHistory, delivered) = trade.DeliverLoaded(actor, request.BlQuantity, request.BlDate, expectedPrice);
             db.ShipmentHistory.Add(shipmentHistory);
@@ -128,7 +128,7 @@ internal static class ShipmentEndpoints
                 return Results.NotFound();
 
             var (history, outcome) = shipment.RecordCertificate(
-                trade.CargoTerms!, request.MeasuredNarKcalKg, request.SulphurPct, request.AshPct, TradingEndpoints.ActorName(user), trade.Price);
+                trade.CargoTerms!, request.MeasuredNarKcalKg, request.SulphurPct, request.AshPct, user.ActorName(), trade.Price);
             db.ShipmentHistory.Add(history);
             await publisher.Publish(outcome, outcome.GetType(), ct);
             await db.SaveChangesAsync(ct);
